@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "ME Inventory",
+        "title": "ME Inventory - Built by Syed Hassaan Shah",
         "width": 1440,
         "height": 920,
         "minWidth": 1100,
@@ -32,6 +32,8 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "publisher": "Syed Hassaan Shah",
+    "copyright": "Copyright (c) 2026 Syed Hassaan Shah",
     "resources": ["../data/me_inventory.db", "../data/me_lab_inventory.db"],
     "windows": {
       "nsis": {

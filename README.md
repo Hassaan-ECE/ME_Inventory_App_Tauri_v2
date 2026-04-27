@@ -2,9 +2,11 @@
 
 ME Inventory is a Tauri 2 desktop inventory app built with React 19, TypeScript, Vite, Tailwind CSS v4, Bun, and FeOxDB.
 
+Built by Syed Hassaan Shah.
+
 The app keeps the existing ME Lab Inventory UI workflow and uses FeOxDB as the authoritative local runtime database. SQLite is used only as a one-time legacy import source.
 
-Current app display name: `ME Inventory v0.9.8`.
+Current app display name: `ME Inventory v0.9.8 - Built by Syed Hassaan Shah`.
 
 ## Migration Baseline
 

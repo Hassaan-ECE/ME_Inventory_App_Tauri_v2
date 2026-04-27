@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { APP_DISPLAY_NAME, APP_VERSION } from "@/branding";
+import { APP_CREDIT, APP_DISPLAY_NAME, APP_VERSION } from "@/branding";
 import { InventoryShell } from "@/components/inventory/InventoryShell";
 import type {
   InventoryCounts,
@@ -159,6 +159,7 @@ describe("InventoryShell shell", () => {
 
     expect(screen.getAllByText("ME Inventory")).toHaveLength(1);
     expect(screen.getByText(`v${APP_VERSION}`)).toBeInTheDocument();
+    expect(screen.getAllByText(APP_CREDIT).length).toBeGreaterThanOrEqual(1);
     expect(document.title).toBe(APP_DISPLAY_NAME);
     expect(screen.queryByText(/prototype/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Import Data" })).not.toBeInTheDocument();

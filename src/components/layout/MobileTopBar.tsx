@@ -1,6 +1,6 @@
 import { MoonIcon, SunIcon, UploadIcon } from "lucide-react";
 
-import { APP_BASE_NAME, APP_VERSION } from "@/branding";
+import { APP_BASE_NAME, APP_CREDIT, APP_VERSION } from "@/branding";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { InventoryScope, ThemeMode } from "@/types/inventory";
@@ -30,6 +30,7 @@ export function MobileTopBar({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{APP_BASE_NAME}</p>
           <p className="mt-1 text-sm font-medium text-foreground">v{APP_VERSION}</p>
+          <p className="mt-1 text-xs font-medium text-muted-foreground">{APP_CREDIT}</p>
         </div>
         <Button aria-label="Toggle theme" size="sm" variant="outline" onClick={onThemeToggle}>
           {theme === "light" ? <MoonIcon className="size-3.5" /> : <SunIcon className="size-3.5" />}

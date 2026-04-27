@@ -2,7 +2,7 @@ import { ChevronDownIcon, FileCodeIcon, FileSpreadsheetIcon, MoonIcon, PlusIcon,
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { APP_VERSION } from "@/branding";
+import { APP_CREDIT, APP_VERSION } from "@/branding";
 import { cn } from "@/lib/utils";
 import type { InventoryScope, ThemeMode, UpdateState } from "@/types/inventory";
 
@@ -76,9 +76,14 @@ export function InventoryHeader({
   return (
     <header className="shrink-0 border-b border-border px-3 py-3 sm:px-5">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex min-w-0 items-baseline gap-2">
-          <h1 className="min-w-0 text-2xl font-semibold tracking-tight text-foreground">ME Inventory</h1>
-          <span className="text-xs font-semibold text-muted-foreground">v{APP_VERSION}</span>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <h1 className="min-w-0 text-2xl font-semibold tracking-tight text-foreground">ME Inventory</h1>
+              <span className="text-xs font-semibold text-muted-foreground">v{APP_VERSION}</span>
+            </div>
+            <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">{APP_CREDIT}</p>
+          </div>
           <UpdateActionButton state={updateState} onClick={onUpdateAction} />
         </div>
 
