@@ -64,7 +64,9 @@ describe("EntryDialog", () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined) as unknown as (_: InventoryEntryInput) => Promise<void>;
     const pickPicturePath = vi.fn().mockResolvedValue("C:\\Pictures\\selected-image.jpg");
+    const loadPicturePreview = vi.fn().mockResolvedValue("data:image/jpeg;base64,cHJldmlldw==");
     window.inventoryDesktop = createDesktopBridge({
+      loadPicturePreview,
       pickPicturePath,
     });
 
@@ -80,6 +82,11 @@ describe("EntryDialog", () => {
     await user.click(screen.getByRole("button", { name: "Browse" }));
 
     expect(pickPicturePath).toHaveBeenCalledTimes(1);
+    expect(await screen.findByAltText("Entry picture preview")).toHaveAttribute(
+      "src",
+      "data:image/jpeg;base64,cHJldmlldw==",
+    );
+    expect(loadPicturePreview).toHaveBeenCalledWith("C:\\Pictures\\selected-image.jpg");
     expect(screen.queryByLabelText("Picture Path")).not.toBeInTheDocument();
     expect(screen.queryByText("C:\\Pictures\\selected-image.jpg")).not.toBeInTheDocument();
     expect(screen.queryByText("Selected image")).not.toBeInTheDocument();
@@ -110,13 +117,13 @@ describe("EntryDialog", () => {
       />,
     );
 
-    fireEvent.load(screen.getByAltText("Entry picture preview"));
+    fireEvent.load(await screen.findByAltText("Entry picture preview"));
     fireEvent.doubleClick(screen.getByRole("button", { name: "Picture preview" }));
 
     expect(openPath).toHaveBeenCalledWith("C:\\Pictures\\fixture-plate.jpg");
   });
 
-  it("shows a missing-picture fallback when the preview fails to load", () => {
+  it("shows a missing-picture fallback when the preview fails to load", async () => {
     render(
       <EntryDialog
         mode="edit"
@@ -126,7 +133,7 @@ describe("EntryDialog", () => {
       />,
     );
 
-    fireEvent.error(screen.getByAltText("Entry picture preview"));
+    fireEvent.error(await screen.findByAltText("Entry picture preview"));
 
     expect(screen.getAllByText("Picture not found").length).toBeGreaterThan(0);
   });
@@ -209,6 +216,7 @@ function createDesktopBridge(
     deleteEntry: vi.fn().mockResolvedValue({ entryId: BASE_ENTRY.id }),
     openExternal: vi.fn().mockResolvedValue(true),
     openPath: vi.fn().mockResolvedValue(true),
+    loadPicturePreview: vi.fn().mockResolvedValue("data:image/jpeg;base64,cHJldmlldw=="),
     pickPicturePath: vi.fn().mockResolvedValue(null),
     ...overrides,
   } as NonNullable<Window["inventoryDesktop"]>;

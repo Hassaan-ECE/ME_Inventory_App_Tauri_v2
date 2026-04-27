@@ -31,6 +31,7 @@ import type {
   InventoryCounts,
   InventoryEntry,
   InventoryEntryInput,
+  InventoryQueryResult,
   InventorySharedStatus,
   InventoryScope,
   SortState,
@@ -42,6 +43,8 @@ const THEME_STORAGE_KEY = "meInventory.theme";
 const COLOR_ROWS_STORAGE_KEY = "meInventory.colorRows";
 const COLUMN_VISIBILITY_STORAGE_KEY = "meInventory.columnVisibility";
 const DEFAULT_SHARED_SYNC_INTERVAL_MS = 10_000;
+const MIN_SHARED_SYNC_INTERVAL_MS = 5_000;
+const MAX_SHARED_SYNC_INTERVAL_MS = 5 * 60_000;
 const MOCK_SHARED_STATUS: InventorySharedStatus = {
   available: true,
   canModify: true,
@@ -52,7 +55,7 @@ const MOCK_SHARED_STATUS: InventorySharedStatus = {
 const DESKTOP_SHARED_PENDING_STATUS: InventorySharedStatus = {
   available: false,
   canModify: false,
-  enabled: true,
+  enabled: false,
   message: "Checking shared workspace...",
   mutationMode: "local",
   syncIntervalMs: DEFAULT_SHARED_SYNC_INTERVAL_MS,
@@ -63,7 +66,7 @@ const EMPTY_COUNTS: InventoryCounts = {
   total: 0,
   verified: 0,
 };
-const DESKTOP_QUERY_LIMIT = 100_000;
+const DESKTOP_QUERY_LIMIT = 5_000;
 
 interface DialogState {
   mode: "add" | "edit";
@@ -100,8 +103,17 @@ export function InventoryShell() {
   const [updateState, setUpdateState] = useState<UpdateState>(() => buildIdleUpdateState());
   const statusTimeoutRef = useRef<number | null>(null);
   const syncInFlightRef = useRef(false);
+  const syncFollowUpRequestedRef = useRef(false);
+  const delayedSyncTimeoutRef = useRef<number | null>(null);
   const initialSyncStartedRef = useRef(false);
   const queryRequestRef = useRef(0);
+  const mountedRef = useRef(false);
+
+  const canApplyDesktopResult = useCallback(
+    (applyResult: boolean, requestId?: number): boolean =>
+      applyResult && mountedRef.current && (requestId === undefined || requestId === queryRequestRef.current),
+    [],
+  );
 
   const markSharedUnavailable = useCallback((message = "Shared workspace unavailable. Saving changes locally."): void => {
     setSharedStatus((current) => ({
@@ -112,7 +124,7 @@ export function InventoryShell() {
       hasLocalOnlyChanges: current.hasLocalOnlyChanges,
       message,
       mutationMode: "local",
-      syncIntervalMs: current.syncIntervalMs ?? DEFAULT_SHARED_SYNC_INTERVAL_MS,
+      syncIntervalMs: clampSharedSyncIntervalMs(current.syncIntervalMs),
     }));
   }, []);
 
@@ -120,19 +132,23 @@ export function InventoryShell() {
   const deferredFilters = useDeferredValue(filters);
 
   const refreshDesktopQuery = useCallback(
-    async ({ applyResult = true, showLoading = false }: { applyResult?: boolean; showLoading?: boolean } = {}): Promise<void> => {
-      if (!window.inventoryDesktop?.queryInventory && !window.inventoryDesktop?.loadInventory) {
-        return;
+    async ({
+      applyResult = true,
+      showLoading = false,
+    }: { applyResult?: boolean; showLoading?: boolean } = {}): Promise<InventoryQueryResult | null> => {
+      const desktopBridge = window.inventoryDesktop;
+      if (!desktopBridge?.queryInventory && !desktopBridge?.loadInventory) {
+        return null;
       }
 
       const requestId = queryRequestRef.current + 1;
       queryRequestRef.current = requestId;
-      if (showLoading) {
+      if (showLoading && canApplyDesktopResult(applyResult, requestId)) {
         setIsLoading(true);
       }
       try {
-        const payload = window.inventoryDesktop.queryInventory
-          ? await window.inventoryDesktop.queryInventory({
+        const payload = desktopBridge.queryInventory
+          ? await desktopBridge.queryInventory({
               filters: deferredFilters,
               limit: DESKTOP_QUERY_LIMIT,
               offset: 0,
@@ -141,16 +157,18 @@ export function InventoryShell() {
               sort: sortState,
             })
           : await loadDesktopInventoryFallback(scope, deferredQuery, deferredFilters, sortState);
-        if (!applyResult || requestId !== queryRequestRef.current) {
-          return;
+        if (!canApplyDesktopResult(applyResult, requestId)) {
+          return null;
         }
+        const shared = normalizeSharedStatus(payload.shared);
         setEntries(payload.entries);
         setDesktopCounts(payload.counts);
         setTotalFiltered(payload.totalFiltered);
         setDataSource("desktop");
-        setSharedStatus((current) => (sharedStatusesMatch(current, payload.shared) ? current : payload.shared));
+        setSharedStatus((current) => (sharedStatusesMatch(current, shared) ? current : shared));
+        return shared === payload.shared ? payload : { ...payload, shared };
       } catch {
-        if (applyResult) {
+        if (canApplyDesktopResult(applyResult, requestId)) {
           setEntries(MOCK_INVENTORY);
           setDesktopCounts(EMPTY_COUNTS);
           setTotalFiltered(MOCK_INVENTORY.length);
@@ -158,43 +176,75 @@ export function InventoryShell() {
           setSharedStatus(MOCK_SHARED_STATUS);
           announceStatus("Database unavailable. Falling back to bundled mock data.");
         }
+        return null;
       } finally {
-        if (applyResult && requestId === queryRequestRef.current) {
+        if (canApplyDesktopResult(applyResult, requestId)) {
           setIsLoading(false);
         }
       }
     },
-    [deferredFilters, deferredQuery, scope, sortState],
+    [canApplyDesktopResult, deferredFilters, deferredQuery, scope, sortState],
   );
 
   const syncEntriesFromDesktop = useCallback(
-    async ({ applyResult = true }: { applyResult?: boolean } = {}): Promise<void> => {
-      if (!window.inventoryDesktop?.syncInventory) {
-        return;
-      }
-      if (syncInFlightRef.current) {
+    async function syncEntriesFromDesktopImpl({
+      applyResult = true,
+    }: { applyResult?: boolean } = {}): Promise<void> {
+      if (!canApplyDesktopResult(applyResult)) {
         return;
       }
 
+      const desktopBridge = window.inventoryDesktop;
+      if (!desktopBridge?.syncInventory) {
+        return;
+      }
+      if (syncInFlightRef.current) {
+        syncFollowUpRequestedRef.current = true;
+        return;
+      }
+
+      const startingRequestId = queryRequestRef.current;
       try {
         syncInFlightRef.current = true;
-        const payload = await window.inventoryDesktop.syncInventory();
-        if (!applyResult) {
+        const payload = await desktopBridge.syncInventory();
+        if (!canApplyDesktopResult(applyResult)) {
           return;
         }
-        setSharedStatus((current) => (sharedStatusesMatch(current, payload.shared) ? current : payload.shared));
-        await refreshDesktopQuery({ applyResult });
-      } catch {
-        if (applyResult) {
-          markSharedUnavailable();
+        const shared = normalizeSharedStatus(payload.shared);
+        setSharedStatus((current) => (sharedStatusesMatch(current, shared) ? current : shared));
+        if (payload.entriesChanged !== false && startingRequestId === queryRequestRef.current) {
           await refreshDesktopQuery({ applyResult });
+        }
+      } catch {
+        if (canApplyDesktopResult(applyResult)) {
+          markSharedUnavailable();
+          if (startingRequestId === queryRequestRef.current) {
+            await refreshDesktopQuery({ applyResult });
+          }
         }
       } finally {
         syncInFlightRef.current = false;
+        if (syncFollowUpRequestedRef.current && canApplyDesktopResult(applyResult)) {
+          syncFollowUpRequestedRef.current = false;
+          void syncEntriesFromDesktopImpl({ applyResult });
+        }
       }
     },
-    [markSharedUnavailable, refreshDesktopQuery],
+    [canApplyDesktopResult, markSharedUnavailable, refreshDesktopQuery],
   );
+
+  const scheduleDesktopSync = useCallback((): void => {
+    if (!window.inventoryDesktop?.syncInventory) {
+      return;
+    }
+    if (delayedSyncTimeoutRef.current !== null) {
+      window.clearTimeout(delayedSyncTimeoutRef.current);
+    }
+    delayedSyncTimeoutRef.current = window.setTimeout(() => {
+      delayedSyncTimeoutRef.current = null;
+      void syncEntriesFromDesktop();
+    }, 750);
+  }, [syncEntriesFromDesktop]);
 
   useEffect(() => {
     document.title = APP_DISPLAY_NAME;
@@ -214,9 +264,16 @@ export function InventoryShell() {
   }, [columnVisibility]);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     return () => {
+      mountedRef.current = false;
+      queryRequestRef.current += 1;
       if (statusTimeoutRef.current !== null) {
         window.clearTimeout(statusTimeoutRef.current);
+      }
+      if (delayedSyncTimeoutRef.current !== null) {
+        window.clearTimeout(delayedSyncTimeoutRef.current);
       }
     };
   }, []);
@@ -229,11 +286,11 @@ export function InventoryShell() {
         return;
       }
 
-      await refreshDesktopQuery({ applyResult: active, showLoading: true });
+      const payload = await refreshDesktopQuery({ applyResult: active, showLoading: true });
 
-      if (active && !initialSyncStartedRef.current) {
+      if (active && payload?.shared.enabled && !initialSyncStartedRef.current) {
         initialSyncStartedRef.current = true;
-        void syncEntriesFromDesktop();
+        void syncEntriesFromDesktop({ applyResult: active });
       }
     }
 
@@ -276,12 +333,12 @@ export function InventoryShell() {
   }, []);
 
   useEffect(() => {
-    if (!window.inventoryDesktop?.syncInventory) {
+    if (!window.inventoryDesktop?.syncInventory || !sharedStatus.enabled) {
       return undefined;
     }
 
     let active = true;
-    const syncIntervalMs = sharedStatus.syncIntervalMs ?? DEFAULT_SHARED_SYNC_INTERVAL_MS;
+    const syncIntervalMs = clampSharedSyncIntervalMs(sharedStatus.syncIntervalMs);
     const intervalId = window.setInterval(() => {
       void syncEntriesFromDesktop({ applyResult: active });
     }, syncIntervalMs);
@@ -294,7 +351,7 @@ export function InventoryShell() {
       window.clearInterval(intervalId);
       unsubscribe?.();
     };
-  }, [sharedStatus.syncIntervalMs, syncEntriesFromDesktop]);
+  }, [sharedStatus.enabled, sharedStatus.syncIntervalMs, syncEntriesFromDesktop]);
 
   const filteredEntries = useMemo(
     () => filterEntries(entries, scope, deferredQuery, deferredFilters),
@@ -310,7 +367,13 @@ export function InventoryShell() {
     ? "Loading inventory entries..."
     : buildResultsLabel(displayCount, scope, deferredQuery, deferredFilters);
   const visibleColumns = useMemo(() => getVisibleColumns(columnVisibility), [columnVisibility]);
-  const entriesById = useMemo(() => new Map(displayEntries.map((entry) => [entry.id, entry])), [displayEntries]);
+  const entriesById = useMemo(() => {
+    const map = new Map<string, InventoryEntry>();
+    for (const entry of displayEntries) {
+      map.set(entry.id, entry);
+    }
+    return map;
+  }, [displayEntries]);
   const statusMessage = isLoading
     ? "Loading ME inventory database..."
     : statusOverride ?? buildDefaultStatusMessage(counts.total, counts.verified, dataSource, sharedStatus);
@@ -336,7 +399,8 @@ export function InventoryShell() {
 
   function applyDesktopMutationFeedback(result: { message: string; shared?: InventorySharedStatus }): void {
     if (result.shared) {
-      setSharedStatus(result.shared);
+      const shared = normalizeSharedStatus(result.shared);
+      setSharedStatus((current) => (sharedStatusesMatch(current, shared) ? current : shared));
     }
     announceStatus(result.message);
   }
@@ -403,6 +467,7 @@ export function InventoryShell() {
           current.map((entry) => (entry.id === entryId ? result.entry : entry)),
         );
         applyDesktopMutationFeedback(result);
+        scheduleDesktopSync();
         void refreshDesktopQuery();
         return;
       } catch {
@@ -434,6 +499,7 @@ export function InventoryShell() {
         const result = await runDesktopMutation(() => window.inventoryDesktop!.updateEntry(dialogState.entryId!, input));
         setEntries((current) => current.map((entry) => (entry.id === result.entry.id ? result.entry : entry)));
         applyDesktopMutationFeedback(result);
+        scheduleDesktopSync();
         void refreshDesktopQuery();
       } else {
         const updatedEntry = buildLocalUpdatedEntry(existingEntry, input);
@@ -449,6 +515,7 @@ export function InventoryShell() {
       const result = await runDesktopMutation(() => window.inventoryDesktop!.createEntry(input));
       setEntries((current) => [result.entry, ...current.filter((entry) => entry.id !== result.entry.id)]);
       applyDesktopMutationFeedback(result);
+      scheduleDesktopSync();
       void refreshDesktopQuery();
     } else {
       const createdEntry = buildLocalCreatedEntry(input);
@@ -475,6 +542,7 @@ export function InventoryShell() {
         const result = await runDesktopMutation(() => window.inventoryDesktop!.setArchivedEntry(entryId, archived));
         setEntries((current) => current.map((entry) => (entry.id === result.entry.id ? result.entry : entry)));
         applyDesktopMutationFeedback(result);
+        scheduleDesktopSync();
         void refreshDesktopQuery();
       } catch {
         announceStatus("Could not update the shared inventory database.");
@@ -510,6 +578,7 @@ export function InventoryShell() {
         const result = await runDesktopMutation(() => window.inventoryDesktop!.deleteEntry(entryId));
         setEntries((current) => current.filter((entry) => entry.id !== entryId));
         applyDesktopMutationFeedback(result);
+        scheduleDesktopSync();
         void refreshDesktopQuery();
         return;
       } catch {
@@ -589,6 +658,16 @@ export function InventoryShell() {
     announceStatus("HTML export is not implemented yet.");
   }
 
+  async function handleOpenExternalLink(url: string, successMessage = "Opened link."): Promise<void> {
+    const opened = await openExternalUrl(url);
+    if (!opened) {
+      announceStatus("Could not open the saved link.");
+      return;
+    }
+
+    announceStatus(successMessage);
+  }
+
   async function handleOpenEntryLink(entryId: string): Promise<void> {
     const entry = entriesById.get(entryId);
     if (!entry) {
@@ -607,13 +686,7 @@ export function InventoryShell() {
       return;
     }
 
-    const opened = await openExternalUrl(externalUrl);
-    if (!opened) {
-      announceStatus("Could not open the saved link.");
-      return;
-    }
-
-    announceStatus(`Opened link: ${linkText}`);
+    await handleOpenExternalLink(externalUrl, `Opened link: ${linkText}`);
   }
 
   async function handleSearchOnline(entryId: string): Promise<void> {
@@ -742,6 +815,9 @@ export function InventoryShell() {
                   columns={visibleColumns}
                   onOpenContextMenu={handleOpenContextMenu}
                   onOpenEntry={handleOpenEntry}
+                  onOpenExternalLink={(url) => {
+                    void handleOpenExternalLink(url);
+                  }}
                   onSortChange={handleSortChange}
                   onToggleVerified={(entryId) => {
                     void handleToggleVerified(entryId);
@@ -913,6 +989,23 @@ function sharedStatusesMatch(left: InventorySharedStatus, right: InventoryShared
   );
 }
 
+function normalizeSharedStatus(status: InventorySharedStatus): InventorySharedStatus {
+  if (status.syncIntervalMs === undefined) {
+    return status;
+  }
+
+  const syncIntervalMs = clampSharedSyncIntervalMs(status.syncIntervalMs);
+  return syncIntervalMs === status.syncIntervalMs ? status : { ...status, syncIntervalMs };
+}
+
+function clampSharedSyncIntervalMs(syncIntervalMs: number | undefined): number {
+  if (typeof syncIntervalMs !== "number" || !Number.isFinite(syncIntervalMs)) {
+    return DEFAULT_SHARED_SYNC_INTERVAL_MS;
+  }
+
+  return Math.min(MAX_SHARED_SYNC_INTERVAL_MS, Math.max(MIN_SHARED_SYNC_INTERVAL_MS, syncIntervalMs));
+}
+
 function hasDesktopBridge(): boolean {
   return typeof window !== "undefined" && Boolean(window.inventoryDesktop?.isDesktop);
 }
@@ -922,7 +1015,7 @@ async function loadDesktopInventoryFallback(
   query: string,
   filters: FilterState,
   sortState: SortState,
-) {
+): Promise<InventoryQueryResult> {
   const payload = await window.inventoryDesktop!.loadInventory();
   const filtered = filterEntries(payload.entries, scope, query, filters);
   const sorted = sortEntries(filtered, sortState);

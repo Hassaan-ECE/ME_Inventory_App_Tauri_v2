@@ -1,6 +1,6 @@
 [package]
 name = "me-inventory"
-version = "0.9.7"
+version = "0.9.8"
 description = "A fast desktop inventory app backed by FeOxDB"
 authors = ["Syed Hassaan Shah"]
 edition = "2021"
@@ -13,7 +13,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
@@ -23,3 +23,8 @@ rusqlite = { version = "0.39.0", features = ["bundled"] }
 uuid = { version = "1.23.1", features = ["v4"] }
 chrono = "0.4.44"
 url = "2"
+rust_xlsxwriter = "0.94.0"
+notify = "8"
+
+[dev-dependencies]
+zip = { version = "7.2", default-features = false, features = ["deflate"] }

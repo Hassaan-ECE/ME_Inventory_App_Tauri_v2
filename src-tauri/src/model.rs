@@ -2,10 +2,10 @@ use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub(crate) const MAX_QUERY_LIMIT: usize = 100_000;
+pub(crate) const MAX_QUERY_LIMIT: usize = 10_000;
 pub(crate) type CommandResult<T> = Result<T, String>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct InventoryEntry {
     pub id: String,
@@ -213,21 +213,6 @@ pub(crate) fn numeric_id(id: &str) -> i64 {
 
 pub(crate) fn now_timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
-}
-
-pub(crate) fn shared_status(message: impl Into<String>) -> InventorySharedStatus {
-    InventorySharedStatus {
-        available: true,
-        can_modify: true,
-        enabled: false,
-        has_local_only_changes: Some(false),
-        message: message.into(),
-        mutation_mode: "local".to_string(),
-        revision: None,
-        shared_db_path: None,
-        shared_root_path: None,
-        sync_interval_ms: Some(10_000),
-    }
 }
 
 pub(crate) fn normalize_entry_input(input: InventoryEntryInput) -> InventoryEntryInput {

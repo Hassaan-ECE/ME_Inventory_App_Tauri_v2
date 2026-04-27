@@ -33,7 +33,10 @@ Already implemented in the current Tauri port:
 - [x] First-run import from current SQLite `entries` schema
 - [x] First-run import from legacy SQLite `equipment` schema
 - [x] Basic Tauri bridge for inventory CRUD and query commands
-- [x] Native bridge for safe external URL opening, local path opening, and picture path picking
+- [x] Native bridge for safe external URL opening, local image path opening, and picture path picking
+- [x] Native Excel export for current Tauri entry fields
+- [x] Safe Tauri updater command scaffold without fake endpoints/signing
+- [x] Automated current-user NSIS installer smoke for install, launch, bundled resources, first-run import, app data path, and uninstall/reinstall preservation
 - [x] TypeScript strict mode is enabled
 - [x] Frontend tests, lint, frontend build, Rust format, Rust check, and Rust tests pass
 
@@ -42,12 +45,17 @@ Known current stubs or missing native bridge methods:
 - [x] `openExternal`
 - [x] `openPath`
 - [x] `pickPicturePath`
-- [ ] `exportExcel`
-- [ ] real `checkForUpdate`
-- [ ] real `downloadUpdate`
-- [ ] real `installUpdate`
-- [ ] real `onSharedInventoryChanged`
+- [x] `exportExcel`
+- [x] scaffolded `checkForUpdate`
+- [x] scaffolded `downloadUpdate`
+- [x] scaffolded `installUpdate`
+- [x] real `onSharedInventoryChanged`
 - [ ] real `onUpdateStateChanged`
+
+Remaining non-scaffolded native systems:
+
+- [ ] real Tauri updater signing, endpoint configuration, release hosting, download, and install flow
+- [x] shared workspace sync operation log foundation
 
 ## Priority 0 - Early Decisions Before More Work
 
@@ -63,7 +71,8 @@ Current Tauri state:
 
 - Local runtime database is FeOxDB.
 - SQLite files are treated as one-time import sources.
-- Shared sync is disabled and reports local-only readiness.
+- Shared sync now uses a local FeOxDB outbox plus append-only shared operation files under `<shared root>\shared\inventory\ops\{client_id}`.
+- Snapshot publishing, manifest compaction, conflict UI, and shared media storage are still deferred.
 
 Architecture decision:
 
@@ -76,15 +85,16 @@ Architecture decision:
 Recommended direction:
 
 - Follow `guidelines.md`.
+- Use `docs/sync-architecture-next-slice.md` as the first compatibility implementation slice.
 - Keep the original Electron shared SQLite code as a behavior and migration reference only.
 - Prefer an operation-ledger model for quantity changes and deterministic conflict handling.
 
 Acceptance criteria:
 
-- [ ] We know whether `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME` must remain the default shared workspace.
-- [ ] We know whether `ME_LAB_SHARED_ROOT` must remain supported.
-- [ ] We know whether installed Electron users must interoperate with new Tauri users during a transition period.
-- [ ] We document the chosen architecture in `README.md`.
+- [x] We know whether `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME` must remain the default shared workspace.
+- [x] We know whether `ME_LAB_SHARED_ROOT` must remain supported.
+- [x] We know whether installed Electron users must interoperate with new Tauri users during a transition period.
+- [x] We document the chosen architecture in `README.md`.
 - [ ] Shared sync implementation uses operation files, snapshots, manifest, and single-writer compaction rather than shared FeOxDB mutation.
 
 ### 2. Decide App Identifier And Data Directory Stability
@@ -116,7 +126,7 @@ Reference files:
 
 Acceptance criteria:
 
-- [ ] Product name, version, identifier, icon, and installer behavior are intentional and documented.
+- [x] Product name, version, identifier, icon, and installer behavior are intentional and documented.
 - [ ] Fresh install and upgrade-from-Electron scenarios are tested.
 
 ## Priority 1 - Native Feature Parity
@@ -154,9 +164,9 @@ Likely edit areas:
 
 Acceptance criteria:
 
-- [ ] "Open Saved Link" opens a safe saved link in the default browser from the Tauri desktop app.
-- [ ] "Search Online" opens a safe Google search URL from the Tauri desktop app.
-- [ ] Unsafe protocols such as `file:`, `javascript:`, and arbitrary shell targets are rejected.
+- [x] "Open Saved Link" opens a safe saved link in the default browser from the Tauri desktop app.
+- [x] "Search Online" opens a safe Google search URL from the Tauri desktop app.
+- [x] Unsafe protocols such as `file:`, `javascript:`, and arbitrary shell targets are rejected.
 - [ ] Unit tests cover accepted and rejected URL cases.
 
 ### 4. Implement Native Open Path For Pictures
@@ -169,11 +179,13 @@ Original Electron reference:
 Current Tauri state:
 
 - The UI can render file URL previews.
+- The UI loads local picture previews through a native validated cache-backed asset command in packaged desktop builds.
 - Double-click/open picture can call `openPath` when the selected picture path is local.
 
 Tasks:
 
 - [x] Add a Tauri command such as `open_path`.
+- [x] Add a Tauri command such as `load_picture_preview` for validated local preview cache paths.
 - [x] Validate that the input is a local filesystem path.
 - [x] Trim whitespace and reject empty paths.
 - [x] Reject obvious URL values here and route URLs through `openExternal`.
@@ -182,10 +194,10 @@ Tasks:
 
 Acceptance criteria:
 
-- [ ] Double-clicking a valid local picture preview opens it with the default Windows handler.
-- [ ] Missing picture paths show the existing "Picture not found" state and do not crash.
-- [ ] Invalid paths do not execute shell commands.
-- [ ] Tests cover valid path, missing path, and unsafe input behavior.
+- [x] Double-clicking a valid local picture preview opens it with the default Windows handler.
+- [x] Missing picture paths show the existing "Picture not found" state and do not crash.
+- [x] Invalid paths do not execute shell commands.
+- [x] Tests cover valid path, missing path, oversized image, and unsafe input behavior.
 
 ### 5. Implement Native Picture Picker
 
@@ -204,14 +216,16 @@ Tasks:
 - [x] Filter common image extensions: `png`, `jpg`, `jpeg`, `webp`, `gif`, `bmp`, `tif`, `tiff`.
 - [x] Return `string | null` through the bridge.
 - [x] Preserve the selected absolute path in the entry `picturePath`.
-- [ ] Confirm paths with spaces and UNC paths behave correctly in a packaged desktop smoke test.
+- [x] Confirm paths with spaces can be selected and saved in a packaged desktop smoke test.
+- [ ] Confirm UNC paths behave correctly in a packaged desktop smoke test.
+- [ ] Implement future shared media storage so selected pictures are copied into the shared inventory media folder and entries store the shared/relative path rather than a user-local path.
 
 Acceptance criteria:
 
 - [ ] Browse opens a native file picker in the Tauri app.
 - [ ] Cancel returns `null` and leaves the form unchanged.
-- [ ] Selecting an image updates the picture path and preview.
-- [ ] Tests cover bridge wiring and UI behavior.
+- [x] Selecting an image updates the picture path and preview in packaged desktop smoke after the native preview fix.
+- [x] Tests cover bridge wiring and UI behavior.
 
 ### 6. Implement Native Excel Export
 
@@ -225,39 +239,32 @@ Current Tauri state:
 
 - `Export > Excel` exists in the UI.
 - The bridge has an optional `exportExcel` type.
-- Tauri bridge does not implement it, so the UI reports "Excel export is only available in the desktop app."
+- Tauri bridge implements `exportExcel` through the Rust `export_excel` command.
+- The first export uses the current Tauri `InventoryEntry` fields only.
 
 Tasks:
 
-- [ ] Choose a lightweight Rust XLSX library and confirm it supports styles, autofilter, frozen rows, and print setup.
-- [ ] Add a save-file dialog with default filename `ME_Inventory_Export.xlsx`.
-- [ ] Export all entries, not just currently filtered rows.
-- [ ] Include active and archived entries together in the `Inventory` sheet with an `Archived` column.
-- [ ] Add an `Import Issues` sheet or decide how import issues are tracked in the FeOxDB migration.
-- [ ] Add an `Export Summary` sheet.
-- [ ] Preserve print-friendly styling:
-  - [ ] styled header row
-  - [ ] zebra striping
-  - [ ] borders
-  - [ ] frozen top row
-  - [ ] autofilter
-  - [ ] landscape print setup
-  - [ ] lifecycle/status fills where practical
-- [ ] Return `{ canceled, outputPath, error }` through `window.inventoryDesktop.exportExcel`.
+- [x] Choose a lightweight Rust XLSX library and confirm it supports styles, autofilter, frozen rows, and print setup.
+- [x] Add a save-file dialog with default filename `ME_Inventory_Export.xlsx`.
+- [x] Export all entries, not just currently filtered rows.
+- [x] Split active and archived entries into two sheets: `Inventory` and `Archive`.
+- [x] Preserve print-friendly styling:
+  - [x] styled header row
+  - [x] zebra striping
+  - [x] borders
+  - [x] frozen top row
+  - [x] autofilter
+  - [x] landscape print setup
+  - [x] lifecycle/status fills where practical
+- [x] Return `{ canceled, outputPath, error }` through `window.inventoryDesktop.exportExcel`.
 
 Acceptance criteria:
 
-- [ ] Desktop `Export > Excel` opens a native save dialog.
-- [ ] Cancel is silent.
-- [ ] Saved workbook opens in Excel.
-- [ ] Workbook has `Inventory`, `Import Issues`, and `Export Summary` sheets or a documented replacement.
-- [ ] Summary labels match original wording:
-  - [ ] `ME Inventory - Export Summary`
-  - [ ] `Entry Scope`
-  - [ ] `Total Entries`
-  - [ ] `Inventory View Entries`
-  - [ ] `Archived Entries`
-- [ ] Automated tests validate workbook structure and key summary labels.
+- [x] Desktop `Export > Excel` opens a native save dialog in a packaged/desktop smoke test.
+- [x] Cancel is silent.
+- [x] Saved workbook opens in Excel in a manual smoke test.
+- [x] Packaged smoke confirms workbook has exactly `Inventory` and `Archive` sheets.
+- [x] Automated tests validate two-sheet workbook structure and active/archive row placement.
 
 ### 7. Implement Shared Workspace Sync
 
@@ -284,45 +291,53 @@ Original behavior to preserve if shared sync remains in scope:
 
 Current Tauri state:
 
-- `sync_inventory` returns no changed entries and a local-ready message.
-- `InventorySharedStatus.enabled` is false.
-- `onSharedInventoryChanged` is a no-op.
+- `sync_inventory` bootstraps existing entries once, pushes pending local outbox operations, pulls remote operation files, applies tombstones, and returns changed entries only when the local projection changed.
+- FeOxDB stores per-entry sync state under `sync:entry_state:{entry_uuid}`, a monotonic `meta:sync_revision`, and stale-operation conflict records under `sync:conflict:{conflict_id}`.
+- Last-write-wins parity is implemented with `(mutation_ts_utc, op_id)` ordering. Older operations are skipped and logged. Newer deletes tombstone entries. Newer upserts after a tombstone restore entries.
+- `InventorySharedStatus.enabled` is true for the shared-sync foundation and reports available/unavailable root state, pending local changes, root path, local/shared mutation mode, and revision.
+- `onSharedInventoryChanged` listens to the Tauri `inventory:shared-changed` event from the native shared-ops watcher and cleans up the listener.
 
 Tasks:
 
-- [ ] Finalize architecture from Priority 0.
-- [ ] Map the `guidelines.md` operation schema onto current `InventoryEntry` fields.
+- [x] Finalize architecture from Priority 0.
+- [x] Map the `guidelines.md` operation schema onto current `InventoryEntry` fields.
 - [ ] Decide whether current entries become `inventory:item:*` records immediately or through a compatibility layer.
-- [ ] Add stable `client_id`, `device_id`, app version, schema version, and local sequence metadata.
-- [ ] Add durable local outbox keyspace.
-- [ ] Define Rust data structures for sync operations, tombstones, revision state, and conflict records.
-- [ ] Implement shared root resolution.
-- [ ] Implement shared operation-log bootstrap.
-- [ ] Implement push pending local operations.
-- [ ] Implement pull missing shared operations.
-- [ ] Implement delete tombstones.
-- [ ] Implement conflict detection and logging.
-- [ ] Implement revision tracking.
-- [ ] Implement local-only mutation state and `hasLocalOnlyChanges`.
+- [x] Add stable `client_id`, `device_id`, app version, schema version, and local sequence metadata.
+- [x] Add durable local outbox keyspace.
+- [x] Define Rust data structures for sync operations and tombstones.
+- [x] Define Rust data structures for revision state and logged stale-operation conflict records.
+- [x] Implement shared root resolution.
+- [x] Implement shared operation-log bootstrap.
+- [x] Implement push pending local operations.
+- [x] Implement pull missing shared operations.
+- [x] Implement delete tombstones.
+- [x] Implement conflict detection and logging.
+- [x] Implement revision tracking.
+- [x] Implement local-only mutation state and `hasLocalOnlyChanges`.
 - [ ] Implement manifest reading and validation.
 - [ ] Implement snapshot reading and validation.
-- [ ] Implement checksum validation for operation files and snapshots.
-- [ ] Implement temp-file-then-rename writes for all shared artifacts.
-- [ ] Ignore `.tmp`, corrupt, unknown-extension, checksum-invalid, and identity-mismatched operation files.
-- [ ] Emit a frontend event when shared inventory changes.
-- [ ] Avoid reloading/repainting when data did not change.
-- [ ] Add clear status messages matching original behavior.
+- [x] Implement checksum validation for operation files.
+- [ ] Implement checksum validation for snapshots.
+- [x] Implement temp-file-then-rename writes for operation files.
+- [ ] Implement temp-file-then-rename writes for snapshots and manifests.
+- [x] Ignore `.tmp`, corrupt, unknown-extension, checksum-invalid, and identity-mismatched operation files.
+- [x] Emit a frontend event when shared inventory changes.
+- [x] Avoid reloading/repainting when data did not change.
+- [x] Add clear shared sync status messages.
 
 Acceptance criteria:
 
-- [ ] When shared workspace is unavailable, add/edit/delete/verify/archive still work locally.
-- [ ] UI reports local-only pending state.
-- [ ] When shared workspace reconnects, pending local operations are pushed.
-- [ ] Changes made by another client are pulled.
-- [ ] Deletes remain deleted across sync because tombstones are applied.
-- [ ] Repeated syncs are idempotent.
+- [x] When shared workspace is unavailable, add/edit/delete/verify/archive still work locally.
+- [x] UI reports local-only pending state.
+- [x] When shared workspace reconnects, pending local operations are pushed.
+- [x] Changes made by another client are pulled.
+- [x] Older/equal upserts do not resurrect deletes because tombstones are applied.
+- [x] Decide and implement explicit restore/newer-upsert policy after tombstone conflicts.
+- [x] Repeated syncs are idempotent.
 - [ ] Busy or locked shared files do not corrupt data.
-- [ ] Tests cover bootstrap, unavailable shared root, push, pull, conflicts, delete tombstones, and reconnect behavior.
+- [x] Tests cover bootstrap, unavailable shared root, push, pull, conflicts, delete tombstones, and reconnect behavior.
+
+Implemented foundation coverage now includes bootstrap, unavailable roots, push/pull between two FeOxDB instances, repeated sync idempotency, corrupt operation-file handling, last-write-wins stale-operation logging, equal-timestamp operation-id tie-breaking, delete tombstones, newer restore after delete, revision increments, watcher setup, frontend coalesced sync triggers, and the `scripts\smoke-sync-one-machine.ps1` two-client smoke. Conflict UI/resolution, snapshots, manifest compaction, and locked-file smoke remain open.
 
 ### 8. Implement Shared Drive Updater
 
@@ -345,32 +360,34 @@ Original behavior:
 
 Current Tauri state:
 
-- `checkForUpdate`, `downloadUpdate`, and `installUpdate` return idle state.
+- `checkForUpdate`, `downloadUpdate`, and `installUpdate` are safe Tauri updater scaffolds.
+- No real updater key, endpoint, artifacts, download, or install flow is configured.
 - `onUpdateStateChanged` is a no-op.
 
 Tasks:
 
-- [ ] Decide whether to keep custom shared-drive updater or use a Tauri updater flow.
+- [x] Decide whether to keep custom shared-drive updater or use a Tauri updater flow.
 - [ ] Implement version comparison in Rust or TypeScript with tests.
-- [ ] Resolve the manifest path from the shared root.
-- [ ] Parse and validate manifest fields.
-- [ ] Verify 64-character hex SHA-256.
-- [ ] Download or copy installer into a local cache directory.
-- [ ] Verify downloaded hash.
+- [ ] Configure real Tauri updater public key, signed artifacts, and HTTPS/static or dynamic endpoint.
+- [ ] Parse and validate real Tauri updater metadata.
+- [ ] Download signed Tauri updater artifact.
+- [ ] Verify signed updater artifact through Tauri updater.
 - [ ] Emit update-state events to the UI.
-- [ ] Launch the installer visibly.
+- [ ] Install through Tauri updater.
 - [ ] Handle errors without breaking inventory usage.
+- [x] Return safe not-configured states without fake availability.
 
 Acceptance criteria:
 
-- [ ] No update available state is quiet.
+- [x] No update available state is quiet.
 - [ ] Newer manifest shows `Update available`.
 - [ ] Download progress is represented in `UpdateState`.
-- [ ] Bad manifest hash is rejected with a clear error.
-- [ ] Hash mismatch is rejected.
+- [ ] Bad updater metadata/signature is rejected with a clear error.
+- [ ] Signature mismatch is rejected.
 - [ ] Ready installer changes action to install.
-- [ ] Install opens the installer and keeps app behavior predictable.
-- [ ] Tests port the important cases from `src/test/updater.test.ts`.
+- [ ] Install uses Tauri updater and keeps app behavior predictable.
+- [x] Scaffold tests verify safe not-configured states.
+- [ ] Tests port the important real updater cases after signing/endpoint config exists.
 
 ## Priority 2 - Data Migration And Storage Hardening
 
@@ -394,7 +411,7 @@ Tasks:
 - [x] Preserve compatibility with `data\me_lab_inventory.db`.
 - [x] Preserve compatibility with `data\me_inventory.db`.
 - [ ] Decide whether to rewrite/migrate SQLite copies or only read from them.
-- [ ] Add import issue tracking if Excel export keeps an `Import Issues` sheet.
+- [ ] Add import issue tracking for a future import review/reporting surface if needed.
 - [ ] Add clear errors for unknown schema versions.
 
 Acceptance criteria:
@@ -495,7 +512,7 @@ Tasks:
 - [ ] Confirm dark-mode select/dropdown readability.
 - [ ] Confirm sidebar metadata layout at large viewport.
 - [ ] Confirm footer actions remain reachable at default window size.
-- [ ] Confirm picture picker and open picture after native commands are added.
+- [ ] Confirm picture picker preview/open after native preview command is added.
 - [ ] Confirm URL picture paths and local picture paths behave predictably.
 
 Acceptance criteria:
@@ -515,15 +532,15 @@ Tasks:
 
 - [ ] Confirm right-click positioning near viewport edges.
 - [ ] Confirm `Open Full Entry`.
-- [ ] Confirm `Open Saved Link`.
-- [ ] Confirm `Search Online`.
+- [x] Confirm `Open Saved Link`.
+- [x] Confirm `Search Online`.
 - [ ] Confirm `Archive Entry` / `Restore Entry`.
 - [ ] Confirm `Delete Entry` opens confirmation dialog.
 
 Acceptance criteria:
 
 - [ ] Keyboard/mouse behavior remains accessible.
-- [ ] Unsafe links do not open.
+- [x] Unsafe links do not open.
 - [ ] Status strip messages match expected outcomes.
 
 ## Priority 4 - Packaging, Installer, And Release Flow
@@ -532,24 +549,30 @@ Acceptance criteria:
 
 Current Tauri state:
 
-- `bun tauri build --bundles nsis` is configured but has not been validated in the clean port during this TODO pass.
+- `bun tauri build --bundles nsis` is configured and validated on Windows.
+- Packaging assumptions, smoke flow, and current smoke evidence are documented in `docs/desktop-smoke-checklist.md`.
+- Automated installer smoke on 2026-04-26 used `src-tauri\target\release\bundle\nsis\ME Inventory_0.9.7_x64-setup.exe` and is logged in `docs/installer-smoke-2026-04-26-worker-a.md`.
+- Final manager QA after reviewer fixes rebuilt the NSIS installer, reinstalled it silently, relaunched it against clean app data, confirmed a 146-entry first-run import, and restored the previous app data. The final log is `docs/release-qa-2026-04-26-manager.md`.
+- Silent current-user install, installed launch, product/version metadata, bundled SQLite resource hashes, first-run import of 146 seed rows, app data path behavior, and uninstall/reinstall app-data preservation passed.
+- Syed manual installed-app smoke on 2026-04-26 validated the visible installer flow, finish-page desktop shortcut creation, delta icon, installed desktop launch, version `0.9.7`, visible imported rows, stable row count after reopen, search, create/edit/verify/archive/restore/delete persistence, Search Online, Excel cancel/save/open, active plus archived export data, and quiet updater scaffold. The log is `docs/manual-smoke-2026-04-26-syed.md`.
+- GUI-only checks remain open for SmartScreen behavior and optional unsafe-link manual testing. Post-fix `Open Saved Link`, picture open/missing-path behavior, Excel two-sheet shape, local-only sync status, and updater quiet state passed manual smoke.
 
 Tasks:
 
-- [ ] Run full Tauri bundle build.
-- [ ] Verify installer output path.
-- [ ] Verify app icon.
-- [ ] Verify bundled `data\me_inventory.db` and `data\me_lab_inventory.db` resources are available for first-run import.
-- [ ] Verify app launches after install.
-- [ ] Verify app data directory behavior.
-- [ ] Verify uninstall/reinstall does not unexpectedly erase user data.
+- [x] Run full Tauri bundle build.
+- [x] Verify installer output path.
+- [x] Verify app icon visually in the installed shortcut/window.
+- [x] Verify bundled `data\me_inventory.db` and `data\me_lab_inventory.db` resources are available for first-run import.
+- [x] Verify app launches after install.
+- [x] Verify app data directory behavior.
+- [x] Verify uninstall/reinstall does not unexpectedly erase user data.
 
 Acceptance criteria:
 
-- [ ] Installer builds successfully on Windows.
-- [ ] Fresh install imports seed inventory once.
-- [ ] Reopening app keeps prior changes.
-- [ ] Installed app has correct product name, icon, and version.
+- [x] Installer builds successfully on Windows.
+- [x] Fresh install imports seed inventory once.
+- [x] Reopening app keeps prior GUI-created changes.
+- [x] Installed app has correct product name, icon, and version.
 
 ### 16. Define Release And Update Publishing Procedure
 
@@ -586,10 +609,10 @@ Original tests not currently present in Tauri port:
 Tasks:
 
 - [ ] Port database behavior tests into Rust unit tests or integration tests.
-- [ ] Port Excel export tests after native export is implemented.
-- [ ] Port updater tests after updater commands are implemented.
+- [x] Port Excel export tests after native export is implemented.
+- [x] Port updater tests after updater commands are implemented.
 - [ ] Keep React tests focused on UI behavior and bridge contracts.
-- [ ] Add command-level tests for Tauri command inputs and errors where practical.
+- [x] Add command-level tests for Tauri command inputs and errors where practical.
 
 Acceptance criteria:
 
@@ -602,24 +625,25 @@ Acceptance criteria:
 Tasks:
 
 - [ ] Launch `bun tauri dev`.
-- [ ] Verify first-run import.
-- [ ] Add entry.
-- [ ] Edit entry.
-- [ ] Toggle verified.
-- [ ] Archive and restore.
-- [ ] Delete with confirmation.
-- [ ] Search/filter/sort.
-- [ ] Open saved link.
-- [ ] Browse/open picture.
-- [ ] Export Excel.
+- [x] Verify first-run import.
+- [x] Add entry.
+- [x] Edit entry.
+- [x] Toggle verified.
+- [x] Archive and restore.
+- [x] Delete with confirmation.
+- [x] Search/filter/sort.
+- [x] Open saved link.
+- [x] Browse/open picture.
+- [x] Export Excel cancel/save/open.
+- [x] Confirm Excel two-sheet `Inventory`/`Archive` contract in packaged smoke.
 - [ ] Simulate shared workspace unavailable.
 - [ ] Simulate shared workspace reconnect.
 - [ ] Check for update and install update.
 
 Acceptance criteria:
 
-- [ ] Manual smoke checklist is documented and repeatable.
-- [ ] Any failed smoke item maps back to a TODO or issue.
+- [x] Manual smoke checklist is documented and repeatable.
+- [x] Any failed smoke item maps back to a TODO or issue.
 
 ## Priority 6 - Original App Roadmap Items Not Yet Implemented In Electron
 
@@ -635,7 +659,7 @@ Tasks:
 
 - [ ] Define accepted import formats.
 - [ ] Decide whether imports write directly to FeOxDB or stage a review screen first.
-- [ ] Track import issues so they can appear in exports.
+- [ ] Track import issues so they can appear in an import review/report if that feature is added.
 - [ ] Prevent duplicate entries by stable identifiers or configurable matching rules.
 
 ### 20. HTML Export
@@ -685,13 +709,14 @@ Apply these to every implementation item:
 - [ ] Avoid hardcoded secrets.
 - [ ] Keep the app usable when shared storage or update storage is offline.
 - [ ] Avoid blocking the UI during import, sync, export, and updater operations.
+- [x] Flush FeOxDB after acknowledged local mutation/import writes.
 - [ ] Add tests for behavior that can regress.
 - [ ] Update `README.md` when user-visible behavior changes.
 - [ ] Run relevant checks before marking a task complete:
-  - [ ] `bun run lint`
-  - [ ] `bun run build`
-  - [ ] `bun run test`
-  - [ ] `cargo fmt -- --check`
-  - [ ] `cargo check`
-  - [ ] `cargo test`
-  - [ ] `bun tauri build --bundles nsis` for packaging changes
+  - [x] `bun run lint`
+  - [x] `bun run build`
+  - [x] `bun run test`
+  - [x] `cargo fmt -- --check`
+  - [x] `cargo check`
+  - [x] `cargo test`
+  - [x] `bun tauri build --bundles nsis` for packaging changes

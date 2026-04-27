@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -46,6 +46,7 @@ describe("InventoryShell table controls", () => {
         sortState={{ column: "manufacturer", direction: "asc" }}
         onOpenContextMenu={() => undefined}
         onOpenEntry={() => undefined}
+        onOpenExternalLink={() => undefined}
         onSortChange={() => undefined}
         onToggleVerified={() => undefined}
       />,
@@ -53,6 +54,47 @@ describe("InventoryShell table controls", () => {
 
     expect(screen.getByText("javascript:alert(1)")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "javascript:alert(1)" })).not.toBeInTheDocument();
+  });
+
+  it("routes safe table links through the supplied native-open handler", async () => {
+    const user = userEvent.setup();
+    const onOpenExternalLink = vi.fn();
+    const entry: InventoryEntry = {
+      archived: false,
+      assetNumber: "ME-LINK",
+      description: "Safe link entry",
+      id: "link-1",
+      links: "https://example.com/item",
+      lifecycleStatus: "active",
+      location: "Bench",
+      manufacturer: "Acme",
+      model: "Link",
+      notes: "",
+      projectName: "Security",
+      qty: 1,
+      updatedAt: "2026-04-25T12:00:00.000Z",
+      verifiedInSurvey: false,
+      workingStatus: "working",
+    };
+
+    render(
+      <InventoryTable
+        canModifyEntries
+        colorRows={false}
+        columns={INVENTORY_COLUMNS}
+        entries={[entry]}
+        sortState={{ column: "manufacturer", direction: "asc" }}
+        onOpenContextMenu={() => undefined}
+        onOpenEntry={() => undefined}
+        onOpenExternalLink={onOpenExternalLink}
+        onSortChange={() => undefined}
+        onToggleVerified={() => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole("link", { name: "example.com/item" }));
+
+    expect(onOpenExternalLink).toHaveBeenCalledWith("https://example.com/item");
   });
 
   it("hides a selected column from the table", async () => {

@@ -15,6 +15,7 @@ interface InventoryTableProps {
   columns: readonly ColumnConfig[];
   onOpenContextMenu: (entryId: string, clientX: number, clientY: number) => void;
   onOpenEntry: (entryId: string) => void;
+  onOpenExternalLink: (url: string) => void;
   onSortChange: (columnKey: ColumnConfig["key"]) => void;
   onToggleVerified: (entryId: string) => void;
   entries: InventoryEntry[];
@@ -31,6 +32,7 @@ export const InventoryTable = memo(function InventoryTable({
   columns,
   onOpenContextMenu,
   onOpenEntry,
+  onOpenExternalLink,
   onSortChange,
   onToggleVerified,
   entries,
@@ -65,12 +67,27 @@ export const InventoryTable = memo(function InventoryTable({
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const node = scrollRef.current;
+    setScrollTop((currentScrollTop) => {
+      const nextScrollTop = clampScrollTop(currentScrollTop, entries.length, viewportHeight);
+      if (node && node.scrollTop !== nextScrollTop) {
+        node.scrollTop = nextScrollTop;
+      }
+
+      return currentScrollTop === nextScrollTop ? currentScrollTop : nextScrollTop;
+    });
+  }, [entries.length, viewportHeight]);
+
   return (
     <section className="flex h-full min-h-0 flex-1 overflow-hidden rounded-3xl border border-border/70 bg-card/80 shadow-sm">
       <div
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
-        onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+        onScroll={(event) => {
+          const nextViewportHeight = event.currentTarget.clientHeight || viewportHeight;
+          setScrollTop(clampScrollTop(event.currentTarget.scrollTop, entries.length, nextViewportHeight));
+        }}
       >
         <table className="w-full table-fixed border-separate border-spacing-0">
           <colgroup>
@@ -138,7 +155,7 @@ export const InventoryTable = memo(function InventoryTable({
                       column.align === "center" ? "text-center" : "text-left",
                     )}
                   >
-                    {renderCell(entry, column, onToggleVerified, canModifyEntries)}
+                    {renderCell(entry, column, onToggleVerified, canModifyEntries, onOpenExternalLink)}
                   </td>
                 ))}
               </tr>
@@ -152,12 +169,39 @@ export const InventoryTable = memo(function InventoryTable({
 });
 
 function getVisibleRange(entryCount: number, scrollTop: number, viewportHeight: number): { end: number; start: number } {
-  const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_ROWS);
-  const visibleCount = Math.ceil(viewportHeight / ROW_HEIGHT) + OVERSCAN_ROWS * 2;
+  const safeEntryCount = getSafeEntryCount(entryCount);
+  if (safeEntryCount === 0) {
+    return { end: 0, start: 0 };
+  }
+
+  const safeViewportHeight = getSafeViewportHeight(viewportHeight);
+  const safeScrollTop = clampScrollTop(scrollTop, safeEntryCount, safeViewportHeight);
+  const firstVisibleRow = Math.min(safeEntryCount - 1, Math.floor(safeScrollTop / ROW_HEIGHT));
+  const visibleRowCount = Math.max(1, Math.ceil(safeViewportHeight / ROW_HEIGHT));
+  const start = Math.max(0, firstVisibleRow - OVERSCAN_ROWS);
+
   return {
-    end: Math.min(entryCount, start + visibleCount),
+    end: Math.min(safeEntryCount, firstVisibleRow + visibleRowCount + OVERSCAN_ROWS),
     start,
   };
+}
+
+function clampScrollTop(scrollTop: number, entryCount: number, viewportHeight: number): number {
+  const safeScrollTop = Number.isFinite(scrollTop) ? Math.max(0, scrollTop) : 0;
+  return Math.min(safeScrollTop, getMaxScrollTop(entryCount, viewportHeight));
+}
+
+function getMaxScrollTop(entryCount: number, viewportHeight: number): number {
+  const safeEntryCount = getSafeEntryCount(entryCount);
+  return Math.max(0, safeEntryCount * ROW_HEIGHT - getSafeViewportHeight(viewportHeight));
+}
+
+function getSafeEntryCount(entryCount: number): number {
+  return Number.isFinite(entryCount) ? Math.max(0, Math.floor(entryCount)) : 0;
+}
+
+function getSafeViewportHeight(viewportHeight: number): number {
+  return Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : ROW_HEIGHT;
 }
 
 function SpacerRow({ colSpan, height }: { colSpan: number; height: number }) {
@@ -173,6 +217,7 @@ function renderCell(
   column: ColumnConfig,
   onToggleVerified: (entryId: string) => void,
   canModifyEntries: boolean,
+  onOpenExternalLink: (url: string) => void,
 ) {
   switch (column.key) {
     case "verified":
@@ -219,7 +264,10 @@ function renderCell(
           href={safeUrl}
           rel="noreferrer"
           title={safeUrl}
-          target="_blank"
+          onClick={(event) => {
+            event.preventDefault();
+            onOpenExternalLink(safeUrl);
+          }}
         >
           {label}
         </a>

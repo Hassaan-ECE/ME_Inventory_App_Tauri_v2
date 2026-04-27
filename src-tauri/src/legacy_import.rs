@@ -35,6 +35,7 @@ pub(crate) fn ensure_legacy_imported(db: &InventoryDb) -> CommandResult<usize> {
 
     let imported = import_legacy_sqlite_from_path(db, sqlite_path)?;
     db.mark_legacy_imported(&sqlite_path.to_string_lossy())?;
+    db.flush();
     Ok(imported)
 }
 
@@ -54,6 +55,7 @@ pub(crate) fn import_legacy_sqlite(db: &InventoryDb) -> CommandResult<LegacyImpo
 
     let imported = import_legacy_sqlite_from_path(db, sqlite_path)?;
     db.mark_legacy_imported(&source_path)?;
+    db.flush();
 
     Ok(LegacyImportResult {
         imported,
@@ -148,23 +150,42 @@ fn import_legacy_sqlite_from_path(db: &InventoryDb, sqlite_path: &Path) -> Comma
         "
     );
 
-    let mut statement = connection.prepare(&sql).map_err(db_error)?;
-    let entries = statement
-        .query_map([], sqlite_row_to_entry)
-        .map_err(db_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(db_error)?;
+    validate_legacy_entries(&connection, &sql)?;
 
+    let mut imported = 0usize;
     let mut max_id = 0;
-    for entry in &entries {
+    for_each_legacy_entry(&connection, &sql, |entry| {
         if let Ok(id) = entry.id.parse::<i64>() {
             max_id = max_id.max(id);
         }
-        db.put_entry(entry)?;
-    }
+        db.put_entry(&entry)?;
+        imported += 1;
+        Ok(())
+    })?;
+
     db.set_next_entry_id(max_id + 1)?;
 
-    Ok(entries.len())
+    Ok(imported)
+}
+
+fn validate_legacy_entries(connection: &Connection, sql: &str) -> CommandResult<()> {
+    for_each_legacy_entry(connection, sql, |_| Ok(()))
+}
+
+fn for_each_legacy_entry(
+    connection: &Connection,
+    sql: &str,
+    mut visit: impl FnMut(InventoryEntry) -> CommandResult<()>,
+) -> CommandResult<()> {
+    let mut statement = connection.prepare(sql).map_err(db_error)?;
+    let rows = statement
+        .query_map([], sqlite_row_to_entry)
+        .map_err(db_error)?;
+    for entry in rows {
+        let entry = entry.map_err(db_error)?;
+        visit(entry)?;
+    }
+    Ok(())
 }
 
 fn detect_inventory_table(connection: &Connection) -> CommandResult<String> {
@@ -254,6 +275,109 @@ mod tests {
         let entries = db.load_entries().unwrap();
         assert_eq!(entries[0].id, "7");
         assert_eq!(entries[0].entry_uuid, "test-entry-uuid");
+    }
+
+    #[test]
+    fn legacy_import_missing_database_fails_without_marking_imported() {
+        let root = unique_test_dir("legacy-import-missing-db");
+        fs::create_dir_all(&root).unwrap();
+        let sqlite_path = root.join("missing.db");
+        let db = InventoryDb::open_at(root.join("inventory.feox"), Some(sqlite_path)).unwrap();
+
+        let error = ensure_legacy_imported(&db).unwrap_err();
+
+        assert!(error.contains("Could not open legacy SQLite database"));
+        assert!(!db.has_legacy_import_marker());
+        assert!(!db.has_entries().unwrap());
+    }
+
+    #[test]
+    fn legacy_import_unknown_schema_fails_without_writing_entries() {
+        let root = unique_test_dir("legacy-import-unknown-schema");
+        fs::create_dir_all(&root).unwrap();
+        let sqlite_path = root.join("legacy.db");
+        let connection = Connection::open(&sqlite_path).unwrap();
+        connection
+            .execute("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)", [])
+            .unwrap();
+        let db = InventoryDb::open_at(root.join("inventory.feox"), Some(sqlite_path)).unwrap();
+
+        let error = ensure_legacy_imported(&db).unwrap_err();
+
+        assert!(error.contains("entries or equipment table"));
+        assert!(!db.has_legacy_import_marker());
+        assert!(!db.has_entries().unwrap());
+    }
+
+    #[test]
+    fn legacy_import_decode_error_fails_without_writing_entries() {
+        let root = unique_test_dir("legacy-import-decode-error");
+        fs::create_dir_all(&root).unwrap();
+        let sqlite_path = root.join("legacy.db");
+        create_test_sqlite(&sqlite_path, "entries", "entry_id", "entry_uuid");
+        let connection = Connection::open(&sqlite_path).unwrap();
+        connection
+            .execute(
+                "
+                INSERT INTO entries (
+                  entry_id,
+                  entry_uuid,
+                  asset_number,
+                  serial_number,
+                  qty,
+                  manufacturer,
+                  model,
+                  description,
+                  project_name,
+                  location,
+                  assigned_to,
+                  links,
+                  notes,
+                  lifecycle_status,
+                  working_status,
+                  condition,
+                  verified_in_survey,
+                  is_archived,
+                  manual_entry,
+                  picture_path,
+                  created_at,
+                  updated_at
+                ) VALUES (
+                  8,
+                  'bad-entry-uuid',
+                  'ME-8',
+                  '',
+                  1,
+                  'Mitutoyo',
+                  'Caliper',
+                  'Malformed row',
+                  'ME',
+                  'Lab',
+                  '',
+                  '',
+                  '',
+                  'active',
+                  'working',
+                  '',
+                  'not-an-integer',
+                  0,
+                  0,
+                  '',
+                  '2025-01-01T00:00:00Z',
+                  '2025-01-02T00:00:00Z'
+                )
+                ",
+                [],
+            )
+            .unwrap();
+        drop(connection);
+        let db = InventoryDb::open_at(root.join("inventory.feox"), Some(sqlite_path)).unwrap();
+
+        let error = ensure_legacy_imported(&db).unwrap_err();
+
+        assert!(!error.is_empty());
+        assert!(!db.has_legacy_import_marker());
+        assert!(!db.has_entries().unwrap());
     }
 
     fn create_test_sqlite(path: &Path, table: &str, id_column: &str, uuid_column: &str) {

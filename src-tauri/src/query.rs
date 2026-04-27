@@ -10,10 +10,9 @@ pub(crate) fn query_entries(
     input: InventoryQueryInput,
 ) -> (Vec<InventoryEntry>, usize) {
     let query = normalize_query_input(input);
-    let mut filtered: Vec<InventoryEntry> = entries
+    let mut filtered: Vec<&InventoryEntry> = entries
         .iter()
         .filter(|entry| entry_matches_query(entry, &query))
-        .cloned()
         .collect();
 
     filtered.sort_by(|left, right| compare_query_entries(left, right, &query.sort));
@@ -21,7 +20,12 @@ pub(crate) fn query_entries(
     let total_filtered = filtered.len();
     let offset = query.offset.unwrap_or(0).min(total_filtered);
     let limit = query.limit.unwrap_or(MAX_QUERY_LIMIT).min(MAX_QUERY_LIMIT);
-    let page = filtered.into_iter().skip(offset).take(limit).collect();
+    let page = filtered
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .cloned()
+        .collect();
 
     (page, total_filtered)
 }

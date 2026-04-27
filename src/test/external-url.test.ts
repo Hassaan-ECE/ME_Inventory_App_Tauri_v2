@@ -19,6 +19,8 @@ describe("external URL safety helpers", () => {
     expect(isSafeExternalUrl("file:///C:/Temp/image.png")).toBe(false);
     expect(isSafeExternalUrl("vscode://file/C:/Temp/file.txt")).toBe(false);
     expect(isSafeExternalUrl("C:\\Temp\\image.png")).toBe(false);
+    expect(isSafeExternalUrl("C:/Temp/image.png")).toBe(false);
+    expect(isSafeExternalUrl("C:Temp\\image.png")).toBe(false);
     expect(isSafeExternalUrl("\\\\server\\share\\image.png")).toBe(false);
   });
 

@@ -1,5 +1,5 @@
 import { ExternalLinkIcon, FolderOpenIcon, ImageIcon, ImageOffIcon } from "lucide-react";
-import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Dispatch, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, SetStateAction } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +54,7 @@ interface EntryFormState {
 }
 
 export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, readOnly = false, entry }: EntryDialogProps) {
+  const isMountedRef = useRef(true);
   const [form, setForm] = useState<EntryFormState>(() => buildFormState(entry, defaultArchived));
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -61,19 +62,24 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
   const formId = useId();
   const showsSidebarActions = mode === "edit" && Boolean(entry) && isLargeViewport;
   const picturePath = form.picturePath.trim();
-  const picturePreviewSrc = buildPicturePreviewSource(picturePath);
-  const [loadedPreviewSrc, setLoadedPreviewSrc] = useState<string | null>(null);
-  const [failedPreviewSrc, setFailedPreviewSrc] = useState<string | null>(null);
-  const picturePreviewState = getPicturePreviewState({
-    failedPreviewSrc,
-    loadedPreviewSrc,
-    picturePath,
-    picturePreviewSrc,
-  });
+  const [picturePreviewSrc, setPicturePreviewSrc] = useState<string | null>(null);
+  const [picturePreviewState, setPicturePreviewState] = useState<PicturePreviewState>("empty");
+  const picturePreviewSrcRef = useRef<string | null>(null);
   const canBrowsePicture = Boolean(window.inventoryDesktop?.pickPicturePath);
   const canOpenPicture = Boolean(picturePath) && picturePreviewState === "loaded";
   const showInlinePicturePreview = (!showsSidebarActions && !readOnly) || (!showsSidebarActions && Boolean(picturePath));
   const showSidebarPicturePreview = showsSidebarActions && (!readOnly || Boolean(picturePath));
+
+  useLayoutEffect(() => {
+    picturePreviewSrcRef.current = picturePreviewSrc;
+  }, [picturePreviewSrc]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
@@ -86,6 +92,55 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isSaving, onClose]);
 
+  useEffect(() => {
+    let active = true;
+    const canSetPreviewState = (): boolean => active && isMountedRef.current;
+
+    async function loadPicturePreview(): Promise<void> {
+      if (!picturePath) {
+        if (!canSetPreviewState()) {
+          return;
+        }
+        setPicturePreviewSrc(null);
+        setPicturePreviewState("empty");
+        return;
+      }
+
+      if (window.inventoryDesktop?.loadPicturePreview && shouldLoadNativePicturePreview(picturePath)) {
+        setPicturePreviewSrc(null);
+        setPicturePreviewState("loading");
+
+        try {
+          const previewSrc = await window.inventoryDesktop.loadPicturePreview(picturePath);
+          if (!canSetPreviewState()) {
+            return;
+          }
+          setPicturePreviewSrc(previewSrc);
+          setPicturePreviewState(previewSrc ? "loading" : "missing");
+        } catch {
+          if (canSetPreviewState()) {
+            setPicturePreviewSrc(null);
+            setPicturePreviewState("missing");
+          }
+        }
+        return;
+      }
+
+      const previewSrc = buildPicturePreviewSource(picturePath);
+      if (!canSetPreviewState()) {
+        return;
+      }
+      setPicturePreviewSrc(previewSrc);
+      setPicturePreviewState(previewSrc ? "loading" : "missing");
+    }
+
+    void loadPicturePreview();
+
+    return () => {
+      active = false;
+    };
+  }, [picturePath]);
+
   async function handleBrowsePicture(): Promise<void> {
     if (!window.inventoryDesktop?.pickPicturePath) {
       return;
@@ -93,6 +148,9 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
 
     try {
       const selectedPath = await window.inventoryDesktop.pickPicturePath();
+      if (!isMountedRef.current) {
+        return;
+      }
       if (!selectedPath) {
         return;
       }
@@ -100,6 +158,9 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
       setError(null);
       updateForm(setForm, "picturePath", selectedPath);
     } catch (browseError) {
+      if (!isMountedRef.current) {
+        return;
+      }
       setError(browseError instanceof Error ? browseError.message : "Could not browse for a picture.");
     }
   }
@@ -111,6 +172,9 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
     }
 
     const opened = await openPictureTarget(targetPath);
+    if (!isMountedRef.current) {
+      return;
+    }
     if (!opened) {
       setError("Could not open the selected picture.");
       return;
@@ -137,9 +201,29 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
       setError(null);
       await onSave(result.value);
     } catch (submissionError) {
+      if (!isMountedRef.current) {
+        return;
+      }
       setIsSaving(false);
       setError(submissionError instanceof Error ? submissionError.message : "Could not save this entry.");
     }
+  }
+
+  function handlePreviewError(previewSrc: string): void {
+    if (!isMountedRef.current || picturePreviewSrcRef.current !== previewSrc) {
+      return;
+    }
+
+    setPicturePreviewSrc(null);
+    setPicturePreviewState("missing");
+  }
+
+  function handlePreviewLoad(previewSrc: string): void {
+    if (!isMountedRef.current || picturePreviewSrcRef.current !== previewSrc) {
+      return;
+    }
+
+    setPicturePreviewState("loaded");
   }
 
   return (
@@ -318,22 +402,8 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
                       onOpen={() => {
                         void handleOpenPicture();
                       }}
-                      onPreviewError={() => {
-                        if (!picturePreviewSrc) {
-                          return;
-                        }
-
-                        setFailedPreviewSrc(picturePreviewSrc);
-                        setLoadedPreviewSrc((current) => (current === picturePreviewSrc ? null : current));
-                      }}
-                      onPreviewLoad={() => {
-                        if (!picturePreviewSrc) {
-                          return;
-                        }
-
-                        setLoadedPreviewSrc(picturePreviewSrc);
-                        setFailedPreviewSrc((current) => (current === picturePreviewSrc ? null : current));
-                      }}
+                      onPreviewError={handlePreviewError}
+                      onPreviewLoad={handlePreviewLoad}
                     />
                   </div>
                 ) : null}
@@ -394,22 +464,8 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
                   onOpen={() => {
                     void handleOpenPicture();
                   }}
-                  onPreviewError={() => {
-                    if (!picturePreviewSrc) {
-                      return;
-                    }
-
-                    setFailedPreviewSrc(picturePreviewSrc);
-                    setLoadedPreviewSrc((current) => (current === picturePreviewSrc ? null : current));
-                  }}
-                  onPreviewLoad={() => {
-                    if (!picturePreviewSrc) {
-                      return;
-                    }
-
-                    setLoadedPreviewSrc(picturePreviewSrc);
-                    setFailedPreviewSrc((current) => (current === picturePreviewSrc ? null : current));
-                  }}
+                  onPreviewError={handlePreviewError}
+                  onPreviewLoad={handlePreviewLoad}
                 />
               ) : null}
 
@@ -466,8 +522,8 @@ interface PicturePreviewCardProps {
   previewState: PicturePreviewState;
   onBrowse: () => void;
   onOpen: () => void;
-  onPreviewError: () => void;
-  onPreviewLoad: () => void;
+  onPreviewError: (previewSrc: string) => void;
+  onPreviewLoad: (previewSrc: string) => void;
 }
 
 function PicturePreviewCard({
@@ -537,8 +593,8 @@ function PicturePreviewCard({
                 previewState === "loaded" ? "opacity-100" : "opacity-0",
               )}
               src={previewSrc}
-              onError={onPreviewError}
-              onLoad={onPreviewLoad}
+              onError={() => onPreviewError(previewSrc)}
+              onLoad={() => onPreviewLoad(previewSrc)}
             />
             {previewState !== "loaded" ? (
               <PreviewPlaceholder icon={ImageIcon} label="Loading preview..." />
@@ -585,26 +641,33 @@ function ContextRow({ label, value }: ContextRowProps) {
 }
 
 function useMediaQuery(query: string): boolean {
-  return useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-        return () => undefined;
-      }
+  const subscribe = useCallback((onStoreChange: () => void) => subscribeToMediaQuery(query, onStoreChange), [query]);
+  const getSnapshot = useCallback(() => getMediaQuerySnapshot(query), [query]);
 
-      const mediaQuery = window.matchMedia(query);
-      const handleChange = (): void => onStoreChange();
-      mediaQuery.addEventListener("change", handleChange);
-      return () => mediaQuery.removeEventListener("change", handleChange);
-    },
-    () => {
-      if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-        return false;
-      }
+  return useSyncExternalStore(subscribe, getSnapshot, getMediaQueryServerSnapshot);
+}
 
-      return window.matchMedia(query).matches;
-    },
-    () => false,
-  );
+function subscribeToMediaQuery(query: string, onStoreChange: () => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => undefined;
+  }
+
+  const mediaQuery = window.matchMedia(query);
+  const handleChange = (): void => onStoreChange();
+  mediaQuery.addEventListener("change", handleChange);
+  return () => mediaQuery.removeEventListener("change", handleChange);
+}
+
+function getMediaQuerySnapshot(query: string): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+
+  return window.matchMedia(query).matches;
+}
+
+function getMediaQueryServerSnapshot(): boolean {
+  return false;
 }
 
 interface DialogActionsProps {
@@ -750,34 +813,8 @@ function buildPicturePreviewSource(picturePath: string): string | null {
   return null;
 }
 
-function getPicturePreviewState({
-  failedPreviewSrc,
-  loadedPreviewSrc,
-  picturePath,
-  picturePreviewSrc,
-}: {
-  failedPreviewSrc: string | null;
-  loadedPreviewSrc: string | null;
-  picturePath: string;
-  picturePreviewSrc: string | null;
-}): PicturePreviewState {
-  if (!picturePath) {
-    return "empty";
-  }
-
-  if (!picturePreviewSrc) {
-    return "missing";
-  }
-
-  if (failedPreviewSrc === picturePreviewSrc) {
-    return "missing";
-  }
-
-  if (loadedPreviewSrc === picturePreviewSrc) {
-    return "loaded";
-  }
-
-  return "loading";
+function shouldLoadNativePicturePreview(picturePath: string): boolean {
+  return !/^(?:https?:|mailto:|data:|file:)/i.test(picturePath.trim());
 }
 
 function handlePreviewKeyDown(

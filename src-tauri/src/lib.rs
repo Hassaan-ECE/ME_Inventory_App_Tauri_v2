@@ -1,9 +1,13 @@
 mod commands;
+mod export;
 mod legacy_import;
 mod model;
 mod native;
 mod query;
+mod shared_watcher;
 mod store;
+mod sync;
+mod updater;
 
 use tauri::{Manager, RunEvent};
 
@@ -16,6 +20,7 @@ pub fn run() {
             let legacy_sqlite_path = legacy_import::resolve_legacy_sqlite_path(app.handle());
             let db = store::InventoryDb::open(app.handle(), legacy_sqlite_path)?;
             app.manage(db);
+            app.manage(shared_watcher::SharedSyncWatcher::new());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -28,9 +33,14 @@ pub fn run() {
             commands::set_archived_entry,
             commands::delete_entry,
             commands::import_legacy_sqlite,
+            export::export_excel,
+            native::load_picture_preview,
             native::open_external,
             native::open_path,
-            native::pick_picture_path
+            native::pick_picture_path,
+            updater::check_for_update,
+            updater::download_update,
+            updater::install_update
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

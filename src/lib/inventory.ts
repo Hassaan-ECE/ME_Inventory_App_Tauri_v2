@@ -34,7 +34,13 @@ export function getVisibleColumns(columnVisibility: Record<ColumnKey, boolean>):
 }
 
 export function getVisibleDataColumnCount(columnVisibility: Record<ColumnKey, boolean>): number {
-  return INVENTORY_COLUMNS.filter((column) => column.key !== "verified" && columnVisibility[column.key]).length;
+  let visibleColumns = 0;
+  for (const column of INVENTORY_COLUMNS) {
+    if (column.key !== "verified" && columnVisibility[column.key]) {
+      visibleColumns += 1;
+    }
+  }
+  return visibleColumns;
 }
 
 export function formatLinkLabel(link: string): string {
@@ -64,8 +70,17 @@ export function getInventoryCounts(entries: InventoryEntry[]): {
   total: number;
   verified: number;
 } {
-  const archive = entries.filter((entry) => entry.archived).length;
-  const verified = entries.filter((entry) => entry.verifiedInSurvey).length;
+  let archive = 0;
+  let verified = 0;
+
+  for (const entry of entries) {
+    if (entry.archived) {
+      archive += 1;
+    }
+    if (entry.verifiedInSurvey) {
+      verified += 1;
+    }
+  }
 
   return {
     inventory: entries.length - archive,
@@ -76,7 +91,13 @@ export function getInventoryCounts(entries: InventoryEntry[]): {
 }
 
 export function hasActiveFilters(filters: FilterState): boolean {
-  return Object.values(filters).some((value) => value.trim().length > 0);
+  return (
+    filters.assetNumber.trim().length > 0 ||
+    filters.manufacturer.trim().length > 0 ||
+    filters.model.trim().length > 0 ||
+    filters.description.trim().length > 0 ||
+    filters.location.trim().length > 0
+  );
 }
 
 export function filterEntries(
@@ -86,6 +107,11 @@ export function filterEntries(
   filters: FilterState,
 ): InventoryEntry[] {
   const normalizedQuery = query.trim().toLowerCase();
+  const assetNumberFilter = filters.assetNumber.trim().toLowerCase();
+  const manufacturerFilter = filters.manufacturer.trim().toLowerCase();
+  const modelFilter = filters.model.trim().toLowerCase();
+  const descriptionFilter = filters.description.trim().toLowerCase();
+  const locationFilter = filters.location.trim().toLowerCase();
 
   return entries.filter((entry) => {
     if (scope === "inventory" && entry.archived) {
@@ -96,11 +122,11 @@ export function filterEntries(
     }
 
     const fieldFiltersMatch =
-      includesText(entry.assetNumber, filters.assetNumber) &&
-      includesText(entry.manufacturer, filters.manufacturer) &&
-      includesText(entry.model, filters.model) &&
-      includesText(entry.description, filters.description) &&
-      includesText(entry.location, filters.location);
+      includesNormalizedFilter(entry.assetNumber, assetNumberFilter) &&
+      includesNormalizedFilter(entry.manufacturer, manufacturerFilter) &&
+      includesNormalizedFilter(entry.model, modelFilter) &&
+      includesNormalizedFilter(entry.description, descriptionFilter) &&
+      includesNormalizedFilter(entry.location, locationFilter);
 
     if (!fieldFiltersMatch) {
       return false;
@@ -110,23 +136,15 @@ export function filterEntries(
       return true;
     }
 
-    return [
-      entry.assetNumber,
-      entry.serialNumber ?? "",
-      entry.manufacturer,
-      entry.model,
-      entry.description,
-      entry.projectName,
-      entry.location,
-      entry.links,
-      entry.notes,
-      entry.lifecycleStatus,
-      entry.workingStatus,
-    ].some((value) => value.toLowerCase().includes(normalizedQuery));
+    return entryMatchesQuery(entry, normalizedQuery);
   });
 }
 
 export function sortEntries(entries: InventoryEntry[], sortState: SortState): InventoryEntry[] {
+  if (entries.length <= 1) {
+    return entries;
+  }
+
   const multiplier = sortState.direction === "asc" ? 1 : -1;
 
   return [...entries].sort((left, right) => {
@@ -187,12 +205,31 @@ export function buildResultsLabel(
   return `${count} ${resultWord} for "${trimmedQuery}"${suffix}`;
 }
 
-function includesText(value: string, filterValue: string): boolean {
-  const filter = filterValue.trim().toLowerCase();
-  if (!filter) {
+function includesNormalizedFilter(value: string, normalizedFilter: string): boolean {
+  if (!normalizedFilter) {
     return true;
   }
-  return value.toLowerCase().includes(filter);
+  return value.toLowerCase().includes(normalizedFilter);
+}
+
+function entryMatchesQuery(entry: InventoryEntry, normalizedQuery: string): boolean {
+  return (
+    includesNormalizedQuery(entry.assetNumber, normalizedQuery) ||
+    includesNormalizedQuery(entry.serialNumber, normalizedQuery) ||
+    includesNormalizedQuery(entry.manufacturer, normalizedQuery) ||
+    includesNormalizedQuery(entry.model, normalizedQuery) ||
+    includesNormalizedQuery(entry.description, normalizedQuery) ||
+    includesNormalizedQuery(entry.projectName, normalizedQuery) ||
+    includesNormalizedQuery(entry.location, normalizedQuery) ||
+    includesNormalizedQuery(entry.links, normalizedQuery) ||
+    includesNormalizedQuery(entry.notes, normalizedQuery) ||
+    includesNormalizedQuery(entry.lifecycleStatus, normalizedQuery) ||
+    includesNormalizedQuery(entry.workingStatus, normalizedQuery)
+  );
+}
+
+function includesNormalizedQuery(value: string | undefined, normalizedQuery: string): boolean {
+  return value?.toLowerCase().includes(normalizedQuery) ?? false;
 }
 
 function getSortValue(entry: InventoryEntry, column: ColumnKey): number | string {

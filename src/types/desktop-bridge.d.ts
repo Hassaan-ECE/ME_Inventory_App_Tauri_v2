@@ -30,6 +30,7 @@ declare global {
       deleteEntry: (entryId: string) => Promise<InventoryDeleteMutationResult>;
       openExternal?: (url: string) => Promise<boolean>;
       openPath?: (path: string) => Promise<boolean>;
+      loadPicturePreview?: (path: string) => Promise<string | null>;
       pickPicturePath?: () => Promise<string | null>;
       exportExcel?: () => Promise<{
         canceled: boolean;

@@ -13,10 +13,27 @@ dist-ssr
 release
 src-tauri/target
 src-tauri/gen
+.tmp
+coverage
+.nyc_output
+.vitest
+test-results
+playwright-report
+blob-report
 *.local
 *.feox
 *.db-shm
 *.db-wal
+*.heapsnapshot
+*.heapprofile
+*.cpuprofile
+*.trace
+*.speedscope.json
+
+# Generated audit and smoke artifacts
+docs/memory-leak-audit/artifacts/
+docs/gui-smoke-active-state.txt
+docs/gui-smoke-window*.png
 
 # Editor directories and files
 .vscode/*
