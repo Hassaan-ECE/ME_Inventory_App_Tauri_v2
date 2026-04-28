@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 
 import { APP_CREDIT, APP_DISPLAY_NAME, APP_VERSION } from "@/branding";
 import { InventoryShell } from "@/components/inventory/InventoryShell";
+import type { InventorySyncResult } from "@/types/desktop-bridge";
 import type {
   InventoryCounts,
   InventoryEntry,
@@ -18,7 +19,7 @@ const CONNECTED_SHARED_STATUS: InventorySharedStatus = {
   enabled: true,
   message: "",
   mutationMode: "shared",
-  syncIntervalMs: 10_000,
+  syncIntervalMs: 60_000,
 };
 const LOCAL_SHARED_STATUS: InventorySharedStatus = {
   available: false,
@@ -27,7 +28,7 @@ const LOCAL_SHARED_STATUS: InventorySharedStatus = {
   hasLocalOnlyChanges: true,
   message: "Shared workspace unavailable. Saving changes locally.",
   mutationMode: "local",
-  syncIntervalMs: 10_000,
+  syncIntervalMs: 60_000,
 };
 const DISABLED_SHARED_STATUS: InventorySharedStatus = {
   available: true,
@@ -161,6 +162,7 @@ describe("InventoryShell shell", () => {
     expect(screen.getByText(`v${APP_VERSION}`)).toBeInTheDocument();
     expect(screen.getAllByText(APP_CREDIT).length).toBeGreaterThanOrEqual(1);
     expect(document.title).toBe(APP_DISPLAY_NAME);
+    expect(document.title).not.toContain(APP_CREDIT);
     expect(screen.queryByText(/prototype/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Import Data" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Export/i })).toBeInTheDocument();
@@ -245,7 +247,13 @@ describe("InventoryShell shell", () => {
     expect(screen.getByText("Total: 2 | Verified: 1/2")).toBeInTheDocument();
   });
 
-  it("passes a bounded limit to desktop queries", async () => {
+  it("filters desktop search locally without querying the backend per keystroke", async () => {
+    const user = userEvent.setup();
+    const desktopEntries = [
+      buildTestEntry({ id: "801", description: "Bridgeport mill", manufacturer: "Bridgeport" }),
+      buildTestEntry({ id: "802", description: "Digital caliper", manufacturer: "Mitutoyo" }),
+    ];
+    const loadInventory = vi.fn().mockResolvedValue(buildDesktopSyncResult(DISABLED_SHARED_STATUS, desktopEntries));
     const queryInventory = vi.fn().mockResolvedValue(buildDesktopQueryResult(DISABLED_SHARED_STATUS));
     const syncInventory = vi.fn().mockResolvedValue({
       dbPath: TEST_DB_PATH,
@@ -254,12 +262,18 @@ describe("InventoryShell shell", () => {
       shared: DISABLED_SHARED_STATUS,
     });
 
-    window.inventoryDesktop = createDesktopBridge({ queryInventory, syncInventory });
+    window.inventoryDesktop = createDesktopBridge({ loadInventory, queryInventory, syncInventory });
 
     render(<InventoryShell />);
 
-    await waitFor(() => expect(queryInventory).toHaveBeenCalled());
-    expect(queryInventory.mock.calls[0]?.[0].limit).toBe(5_000);
+    expect(await screen.findByText("Showing all 2 entries")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Inventory search"), "mit");
+
+    await waitFor(() => expect(screen.getByText('1 result for "mit"')).toBeInTheDocument());
+    expect(screen.getByText("Mitutoyo")).toBeInTheDocument();
+    expect(screen.queryByText("Bridgeport")).not.toBeInTheDocument();
+    expect(loadInventory).toHaveBeenCalledTimes(1);
+    expect(queryInventory).not.toHaveBeenCalled();
     expect(syncInventory).not.toHaveBeenCalled();
   });
 
@@ -284,7 +298,7 @@ describe("InventoryShell shell", () => {
 
     try {
       window.inventoryDesktop = createDesktopBridge({
-        queryInventory: vi.fn().mockResolvedValue(buildDesktopQueryResult(DISABLED_SHARED_STATUS)),
+        loadInventory: vi.fn().mockResolvedValue(buildDesktopSyncResult(DISABLED_SHARED_STATUS)),
         syncInventory,
       });
 
@@ -317,7 +331,7 @@ describe("InventoryShell shell", () => {
 
     try {
       window.inventoryDesktop = createDesktopBridge({
-        queryInventory: vi.fn().mockResolvedValue(buildDesktopQueryResult(fastSharedStatus)),
+        loadInventory: vi.fn().mockResolvedValue(buildDesktopSyncResult(fastSharedStatus)),
         syncInventory: vi.fn().mockResolvedValue({
           dbPath: TEST_DB_PATH,
           entries: [],
@@ -330,7 +344,7 @@ describe("InventoryShell shell", () => {
 
       await flushAsyncWork();
       await flushAsyncWork();
-      expect(scheduledIntervals).toContain(5_000);
+      expect(scheduledIntervals).toContain(30_000);
       expect(scheduledIntervals).not.toContain(1);
     } finally {
       setIntervalSpy.mockRestore();
@@ -366,7 +380,7 @@ describe("InventoryShell shell", () => {
     try {
       window.inventoryDesktop = createDesktopBridge({
         onSharedInventoryChanged,
-        queryInventory: vi.fn().mockResolvedValue(buildDesktopQueryResult(CONNECTED_SHARED_STATUS)),
+        loadInventory: vi.fn().mockResolvedValue(buildDesktopSyncResult(CONNECTED_SHARED_STATUS)),
         syncInventory,
       });
 
@@ -420,7 +434,7 @@ describe("InventoryShell shell", () => {
       });
 
     window.inventoryDesktop = createDesktopBridge({
-      queryInventory: vi.fn().mockResolvedValue(buildDesktopQueryResult(CONNECTED_SHARED_STATUS, [entry])),
+      loadInventory: vi.fn().mockResolvedValue(buildDesktopSyncResult(CONNECTED_SHARED_STATUS, [entry])),
       syncInventory,
       toggleVerifiedEntry,
     });
@@ -464,7 +478,7 @@ describe("InventoryShell shell", () => {
         sharedChangeCallback = callback;
         return () => undefined;
       }),
-      queryInventory: vi.fn().mockResolvedValue(buildDesktopQueryResult(CONNECTED_SHARED_STATUS, [entry])),
+      loadInventory: vi.fn().mockResolvedValue(buildDesktopSyncResult(CONNECTED_SHARED_STATUS, [entry])),
       syncInventory,
     });
 
@@ -504,7 +518,7 @@ describe("InventoryShell shell", () => {
     });
 
     window.inventoryDesktop = createDesktopBridge({
-      queryInventory: vi.fn().mockResolvedValue(buildDesktopQueryResult(CONNECTED_SHARED_STATUS, [entry])),
+      loadInventory: vi.fn().mockResolvedValue(buildDesktopSyncResult(CONNECTED_SHARED_STATUS, [entry])),
       syncInventory,
       toggleVerifiedEntry: vi.fn().mockResolvedValue({
         entry: { ...entry, verifiedInSurvey: true },
@@ -528,24 +542,24 @@ describe("InventoryShell shell", () => {
     expect(syncInventory).not.toHaveBeenCalled();
   });
 
-  it("does not start initial sync after a desktop query resolves post-unmount", async () => {
-    const deferredQuery = createDeferred<InventoryQueryResult>();
-    const queryInventory = vi.fn(() => deferredQuery.promise);
+  it("does not start initial sync after a desktop load resolves post-unmount", async () => {
+    const deferredLoad = createDeferred<InventorySyncResult>();
+    const loadInventory = vi.fn(() => deferredLoad.promise);
     const syncInventory = vi.fn().mockResolvedValue({
       dbPath: TEST_DB_PATH,
       entries: [],
       entriesChanged: false,
       shared: CONNECTED_SHARED_STATUS,
     });
-    window.inventoryDesktop = createDesktopBridge({ queryInventory, syncInventory });
+    window.inventoryDesktop = createDesktopBridge({ loadInventory, syncInventory });
 
     const { unmount } = render(<InventoryShell />);
-    await waitFor(() => expect(queryInventory).toHaveBeenCalled());
+    await waitFor(() => expect(loadInventory).toHaveBeenCalled());
 
     unmount();
     await act(async () => {
-      deferredQuery.resolve(buildDesktopQueryResult(CONNECTED_SHARED_STATUS));
-      await deferredQuery.promise;
+      deferredLoad.resolve(buildDesktopSyncResult(CONNECTED_SHARED_STATUS));
+      await deferredLoad.promise;
     });
 
     expect(syncInventory).not.toHaveBeenCalled();
@@ -974,6 +988,14 @@ function buildDesktopQueryResult(shared: InventorySharedStatus, entries: Invento
     entries,
     shared,
     totalFiltered: entries.length,
+  };
+}
+
+function buildDesktopSyncResult(shared: InventorySharedStatus, entries: InventoryEntry[] = []): InventorySyncResult {
+  return {
+    dbPath: TEST_DB_PATH,
+    entries,
+    shared,
   };
 }
 

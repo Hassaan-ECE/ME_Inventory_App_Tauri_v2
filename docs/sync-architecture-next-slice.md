@@ -46,7 +46,7 @@ sync:corrupt_remote:{content_hash_or_file_id}
   "client_id": "uuid",
   "device_id": "machine-or-install-id",
   "local_seq": 1,
-  "app_version": "0.9.8",
+  "app_version": "0.9.6",
   "created_at_utc": "2026-04-26T00:00:00.000Z",
   "type": "inventory.entry.update",
   "entity_type": "inventory_entry",

@@ -30,7 +30,7 @@ const LOCAL_SEQ_WIDTH: usize = 12;
 const MAX_LOCAL_SEQ: u64 = 999_999_999_999;
 const CHECKSUM_PREFIX: &str = "sha256:";
 const BOOTSTRAP_COMPLETE_KEY: &str = "meta:sync_bootstrap_complete";
-const SHARED_SYNC_INTERVAL_MS: u64 = 10_000;
+const SHARED_SYNC_INTERVAL_MS: u64 = 60_000;
 
 pub(crate) type SyncCoreResult<T> = Result<T, SyncCoreError>;
 

@@ -8,16 +8,16 @@ Do not change the app identifier during this wave. The configured identifier is 
 
 Validated by read-only inspection on 2026-04-26:
 
-- `src-tauri/tauri.conf.json` sets `productName` to `ME Inventory`, `version` to `0.9.8`, `identifier` to `com.me.inventory`, and bundles only the `nsis` target.
+- `src-tauri/tauri.conf.json` sets `productName` to `ME Inventory`, `version` to `0.9.6`, `identifier` to `com.me.inventory`, and bundles only the `nsis` target.
 - `src-tauri/tauri.conf.json` sets `bundle.windows.nsis.installMode` to `currentUser`.
-- `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` all report version `0.9.8`; `src/branding.ts` derives the displayed version from `package.json`.
+- `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` all report version `0.9.6`; `src/branding.ts` derives the displayed version from `package.json`.
 - The bundle resources list includes `../data/me_inventory.db` and `../data/me_lab_inventory.db`; both files exist under `data/` in this checkout.
 - The configured Windows icon is `src-tauri/icons/icon.ico`; the file exists in this checkout.
 - `src-tauri/capabilities/default.json` grants `core:default` to the `main` window. The current frontend uses custom Tauri commands for inventory, native open, and picture picking rather than direct frontend calls to the dialog or opener plugins.
 - Runtime storage is a local FeOxDB file named `inventory.feox` under Tauri's app data directory for this identifier.
 - First-run import searches `ME_INVENTORY_LEGACY_SQLITE`, local `data/` SQLite files, bundled resources, and current-directory `data/` SQLite files.
 - Shared sync has an operation-log foundation. `sync_inventory` bootstraps local entries, pushes pending outbox operations, pulls remote operation files, and reports shared-root availability/pending local state.
-- Updater commands are scaffolded in Rust and return safe not-configured states until real Tauri updater signing and endpoints are configured.
+- Updater commands read the shared-drive release manifest, copy the installer to the app update cache, verify SHA-256, and open the verified installer.
 - Excel export is wired into the Tauri desktop bridge for the current Tauri entry fields.
 
 ## Planned NSIS Current-User Installer Flow

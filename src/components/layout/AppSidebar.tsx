@@ -1,6 +1,6 @@
 import { ArchiveIcon, CommandIcon, PackageIcon, UploadIcon } from "lucide-react";
 
-import { APP_BASE_NAME, APP_CREDIT, APP_VERSION } from "@/branding";
+import { APP_BASE_NAME, APP_VERSION } from "@/branding";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { InventoryScope } from "@/types/inventory";
@@ -27,7 +27,6 @@ export function AppSidebar({
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{APP_BASE_NAME}</p>
             <p className="mt-1 text-sm font-medium text-foreground">Shared entry workspace</p>
-            <p className="mt-1 text-xs font-medium text-muted-foreground">{APP_CREDIT}</p>
           </div>
           <Badge size="sm" variant="secondary">
             v{APP_VERSION}

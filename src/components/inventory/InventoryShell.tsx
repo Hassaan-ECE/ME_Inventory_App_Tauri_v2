@@ -28,22 +28,21 @@ import { INVENTORY_COLUMNS } from "@/types/inventory";
 import type {
   ColumnKey,
   FilterState,
-  InventoryCounts,
   InventoryEntry,
   InventoryEntryInput,
-  InventoryQueryResult,
   InventorySharedStatus,
   InventoryScope,
   SortState,
   ThemeMode,
   UpdateState,
 } from "@/types/inventory";
+import type { InventorySyncResult } from "@/types/desktop-bridge";
 
 const THEME_STORAGE_KEY = "meInventory.theme";
 const COLOR_ROWS_STORAGE_KEY = "meInventory.colorRows";
 const COLUMN_VISIBILITY_STORAGE_KEY = "meInventory.columnVisibility";
-const DEFAULT_SHARED_SYNC_INTERVAL_MS = 10_000;
-const MIN_SHARED_SYNC_INTERVAL_MS = 5_000;
+const DEFAULT_SHARED_SYNC_INTERVAL_MS = 60_000;
+const MIN_SHARED_SYNC_INTERVAL_MS = 30_000;
 const MAX_SHARED_SYNC_INTERVAL_MS = 5 * 60_000;
 const MOCK_SHARED_STATUS: InventorySharedStatus = {
   available: true,
@@ -60,14 +59,6 @@ const DESKTOP_SHARED_PENDING_STATUS: InventorySharedStatus = {
   mutationMode: "local",
   syncIntervalMs: DEFAULT_SHARED_SYNC_INTERVAL_MS,
 };
-const EMPTY_COUNTS: InventoryCounts = {
-  archive: 0,
-  inventory: 0,
-  total: 0,
-  verified: 0,
-};
-const DESKTOP_QUERY_LIMIT = 5_000;
-
 interface DialogState {
   mode: "add" | "edit";
   entryId?: string;
@@ -91,8 +82,6 @@ export function InventoryShell() {
   const [columnVisibility, setColumnVisibility] = useState<Record<ColumnKey, boolean>>(() => readColumnVisibility());
   const [sortState, setSortState] = useState<SortState>({ column: "manufacturer", direction: "asc" });
   const [isLoading, setIsLoading] = useState<boolean>(() => hasDesktopBridge());
-  const [desktopCounts, setDesktopCounts] = useState<InventoryCounts>(EMPTY_COUNTS);
-  const [totalFiltered, setTotalFiltered] = useState(0);
   const [sharedStatus, setSharedStatus] = useState<InventorySharedStatus>(() =>
     hasDesktopBridge() ? DESKTOP_SHARED_PENDING_STATUS : MOCK_SHARED_STATUS,
   );
@@ -131,13 +120,13 @@ export function InventoryShell() {
   const deferredQuery = useDeferredValue(query);
   const deferredFilters = useDeferredValue(filters);
 
-  const refreshDesktopQuery = useCallback(
+  const refreshDesktopEntries = useCallback(
     async ({
       applyResult = true,
       showLoading = false,
-    }: { applyResult?: boolean; showLoading?: boolean } = {}): Promise<InventoryQueryResult | null> => {
+    }: { applyResult?: boolean; showLoading?: boolean } = {}): Promise<InventorySyncResult | null> => {
       const desktopBridge = window.inventoryDesktop;
-      if (!desktopBridge?.queryInventory && !desktopBridge?.loadInventory) {
+      if (!desktopBridge?.loadInventory) {
         return null;
       }
 
@@ -147,31 +136,18 @@ export function InventoryShell() {
         setIsLoading(true);
       }
       try {
-        const payload = desktopBridge.queryInventory
-          ? await desktopBridge.queryInventory({
-              filters: deferredFilters,
-              limit: DESKTOP_QUERY_LIMIT,
-              offset: 0,
-              query: deferredQuery,
-              scope,
-              sort: sortState,
-            })
-          : await loadDesktopInventoryFallback(scope, deferredQuery, deferredFilters, sortState);
+        const payload = await desktopBridge.loadInventory();
         if (!canApplyDesktopResult(applyResult, requestId)) {
           return null;
         }
         const shared = normalizeSharedStatus(payload.shared);
         setEntries(payload.entries);
-        setDesktopCounts(payload.counts);
-        setTotalFiltered(payload.totalFiltered);
         setDataSource("desktop");
         setSharedStatus((current) => (sharedStatusesMatch(current, shared) ? current : shared));
         return shared === payload.shared ? payload : { ...payload, shared };
       } catch {
         if (canApplyDesktopResult(applyResult, requestId)) {
           setEntries(MOCK_INVENTORY);
-          setDesktopCounts(EMPTY_COUNTS);
-          setTotalFiltered(MOCK_INVENTORY.length);
           setDataSource("mock");
           setSharedStatus(MOCK_SHARED_STATUS);
           announceStatus("Database unavailable. Falling back to bundled mock data.");
@@ -183,7 +159,7 @@ export function InventoryShell() {
         }
       }
     },
-    [canApplyDesktopResult, deferredFilters, deferredQuery, scope, sortState],
+    [canApplyDesktopResult],
   );
 
   const syncEntriesFromDesktop = useCallback(
@@ -212,14 +188,17 @@ export function InventoryShell() {
         }
         const shared = normalizeSharedStatus(payload.shared);
         setSharedStatus((current) => (sharedStatusesMatch(current, shared) ? current : shared));
-        if (payload.entriesChanged !== false && startingRequestId === queryRequestRef.current) {
-          await refreshDesktopQuery({ applyResult });
+        if (payload.entriesChanged === true && startingRequestId === queryRequestRef.current) {
+          setEntries(payload.entries);
+          setDataSource("desktop");
+        } else if (payload.entriesChanged === undefined && startingRequestId === queryRequestRef.current) {
+          await refreshDesktopEntries({ applyResult });
         }
       } catch {
         if (canApplyDesktopResult(applyResult)) {
           markSharedUnavailable();
           if (startingRequestId === queryRequestRef.current) {
-            await refreshDesktopQuery({ applyResult });
+            await refreshDesktopEntries({ applyResult });
           }
         }
       } finally {
@@ -230,7 +209,7 @@ export function InventoryShell() {
         }
       }
     },
-    [canApplyDesktopResult, markSharedUnavailable, refreshDesktopQuery],
+    [canApplyDesktopResult, markSharedUnavailable, refreshDesktopEntries],
   );
 
   const scheduleDesktopSync = useCallback((): void => {
@@ -282,11 +261,11 @@ export function InventoryShell() {
     let active = true;
 
     async function loadEntriesFromDesktop(): Promise<void> {
-      if (!window.inventoryDesktop?.queryInventory && !window.inventoryDesktop?.loadInventory) {
+      if (!window.inventoryDesktop?.loadInventory) {
         return;
       }
 
-      const payload = await refreshDesktopQuery({ applyResult: active, showLoading: true });
+      const payload = await refreshDesktopEntries({ applyResult: active, showLoading: true });
 
       if (active && payload?.shared.enabled && !initialSyncStartedRef.current) {
         initialSyncStartedRef.current = true;
@@ -299,7 +278,7 @@ export function InventoryShell() {
     return () => {
       active = false;
     };
-  }, [refreshDesktopQuery, syncEntriesFromDesktop]);
+  }, [refreshDesktopEntries, syncEntriesFromDesktop]);
 
   useEffect(() => {
     if (!window.inventoryDesktop?.checkForUpdate) {
@@ -358,10 +337,9 @@ export function InventoryShell() {
     [deferredFilters, deferredQuery, entries, scope],
   );
   const sortedEntries = useMemo(() => sortEntries(filteredEntries, sortState), [filteredEntries, sortState]);
-  const mockCounts = useMemo(() => getInventoryCounts(entries), [entries]);
-  const counts = dataSource === "desktop" ? desktopCounts : mockCounts;
-  const displayEntries = dataSource === "desktop" ? entries : sortedEntries;
-  const displayCount = dataSource === "desktop" ? totalFiltered : sortedEntries.length;
+  const counts = useMemo(() => getInventoryCounts(entries), [entries]);
+  const displayEntries = sortedEntries;
+  const displayCount = sortedEntries.length;
   const canModifyEntries = dataSource !== "desktop" || sharedStatus.canModify;
   const resultsLabel = isLoading
     ? "Loading inventory entries..."
@@ -468,7 +446,6 @@ export function InventoryShell() {
         );
         applyDesktopMutationFeedback(result);
         scheduleDesktopSync();
-        void refreshDesktopQuery();
         return;
       } catch {
         announceStatus("Could not update the ME Inventory database.");
@@ -500,7 +477,6 @@ export function InventoryShell() {
         setEntries((current) => current.map((entry) => (entry.id === result.entry.id ? result.entry : entry)));
         applyDesktopMutationFeedback(result);
         scheduleDesktopSync();
-        void refreshDesktopQuery();
       } else {
         const updatedEntry = buildLocalUpdatedEntry(existingEntry, input);
         setEntries((current) => current.map((entry) => (entry.id === updatedEntry.id ? updatedEntry : entry)));
@@ -516,7 +492,6 @@ export function InventoryShell() {
       setEntries((current) => [result.entry, ...current.filter((entry) => entry.id !== result.entry.id)]);
       applyDesktopMutationFeedback(result);
       scheduleDesktopSync();
-      void refreshDesktopQuery();
     } else {
       const createdEntry = buildLocalCreatedEntry(input);
       setEntries((current) => [createdEntry, ...current]);
@@ -543,7 +518,6 @@ export function InventoryShell() {
         setEntries((current) => current.map((entry) => (entry.id === result.entry.id ? result.entry : entry)));
         applyDesktopMutationFeedback(result);
         scheduleDesktopSync();
-        void refreshDesktopQuery();
       } catch {
         announceStatus("Could not update the shared inventory database.");
         return;
@@ -579,7 +553,6 @@ export function InventoryShell() {
         setEntries((current) => current.filter((entry) => entry.id !== entryId));
         applyDesktopMutationFeedback(result);
         scheduleDesktopSync();
-        void refreshDesktopQuery();
         return;
       } catch {
         announceStatus("Could not delete from the shared inventory database.");
@@ -1008,25 +981,6 @@ function clampSharedSyncIntervalMs(syncIntervalMs: number | undefined): number {
 
 function hasDesktopBridge(): boolean {
   return typeof window !== "undefined" && Boolean(window.inventoryDesktop?.isDesktop);
-}
-
-async function loadDesktopInventoryFallback(
-  scope: InventoryScope,
-  query: string,
-  filters: FilterState,
-  sortState: SortState,
-): Promise<InventoryQueryResult> {
-  const payload = await window.inventoryDesktop!.loadInventory();
-  const filtered = filterEntries(payload.entries, scope, query, filters);
-  const sorted = sortEntries(filtered, sortState);
-
-  return {
-    counts: getInventoryCounts(payload.entries),
-    dbPath: payload.dbPath,
-    entries: sorted,
-    shared: payload.shared,
-    totalFiltered: sorted.length,
-  };
 }
 
 function buildDefaultStatusMessage(

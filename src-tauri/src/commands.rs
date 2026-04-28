@@ -28,24 +28,33 @@ pub(crate) fn query_inventory(
 }
 
 #[tauri::command]
-pub(crate) fn sync_inventory(
+pub(crate) async fn sync_inventory(
     app: AppHandle,
     watcher: State<'_, SharedSyncWatcher>,
     db: State<'_, InventoryDb>,
 ) -> CommandResult<InventorySyncResult> {
-    let result = sync::run_shared_sync(&db)?;
+    let db = db.inner().clone();
+    let (result, entries, db_path) = tauri::async_runtime::spawn_blocking(move || {
+        let result = sync::run_shared_sync(&db)?;
+        let entries = if result.entries_changed {
+            db.load_entries()?
+        } else {
+            Vec::new()
+        };
+
+        Ok::<_, String>((result, entries, db.db_path_string()))
+    })
+    .await
+    .map_err(|error| format!("Shared sync task failed: {error}"))??;
+
     if result.shared.available {
         let paths = sync::resolved_shared_sync_paths();
         watcher.ensure_watching(app, &paths.ops_dir)?;
     }
 
     Ok(InventorySyncResult {
-        db_path: db.db_path_string(),
-        entries: if result.entries_changed {
-            db.load_entries()?
-        } else {
-            Vec::new()
-        },
+        db_path,
+        entries,
         entries_changed: Some(result.entries_changed),
         shared: result.shared,
     })

@@ -1,7 +1,7 @@
 {
   "name": "me-inventory",
   "private": true,
-  "version": "0.9.8",
+  "version": "0.9.6",
   "description": "Standalone ME Inventory desktop app backed by Tauri and FeOxDB.",
   "author": "Syed Hassaan Shah",
   "type": "module",

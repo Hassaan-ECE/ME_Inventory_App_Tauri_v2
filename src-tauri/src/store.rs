@@ -77,6 +77,7 @@ impl SyncKeyspace {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct InventoryDb {
     store: Arc<FeoxStore>,
     db_path: PathBuf,
