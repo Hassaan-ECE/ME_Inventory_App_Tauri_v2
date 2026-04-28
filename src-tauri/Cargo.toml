@@ -1,6 +1,6 @@
 [package]
 name = "me-inventory"
-version = "0.9.6"
+version = "0.9.7"
 description = "A fast desktop inventory app backed by FeOxDB"
 authors = ["Syed Hassaan Shah"]
 edition = "2021"

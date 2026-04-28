@@ -119,7 +119,10 @@ fn download_update_to_cache(root: &Path, cache_dir: &Path) -> UpdaterCommandResu
     if !installer_path.exists() {
         return Ok(error_state(
             &manifest,
-            format!("Update installer was not found: {}", installer_path.display()),
+            format!(
+                "Update installer was not found: {}",
+                installer_path.display()
+            ),
         ));
     }
 
@@ -192,8 +195,12 @@ fn read_manifest(root: &Path) -> UpdaterCommandResult<UpdateManifest> {
     let path = root.join(MANIFEST_FILE);
     let text = fs::read_to_string(&path)
         .map_err(|error| format!("Could not read update manifest {}: {error}", path.display()))?;
-    serde_json::from_str(&text)
-        .map_err(|error| format!("Could not parse update manifest {}: {error}", path.display()))
+    serde_json::from_str(&text).map_err(|error| {
+        format!(
+            "Could not parse update manifest {}: {error}",
+            path.display()
+        )
+    })
 }
 
 fn resolve_update_root() -> PathBuf {

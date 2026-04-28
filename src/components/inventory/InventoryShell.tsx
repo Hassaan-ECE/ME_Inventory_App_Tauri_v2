@@ -1,7 +1,8 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
-import { APP_DISPLAY_NAME, APP_VERSION } from "@/branding";
+import { APP_DISPLAY_NAME } from "@/branding";
 import { ColumnMenu } from "@/components/inventory/ColumnMenu";
+import { DeleteConfirmationDialog } from "@/components/inventory/shell/DeleteConfirmationDialog";
 import { EmptyResults } from "@/components/inventory/EmptyResults";
 import { FilterPanel } from "@/components/inventory/FilterPanel";
 import { InventoryHeader } from "@/components/inventory/InventoryHeader";
@@ -10,18 +11,34 @@ import { EntryDialog } from "@/components/inventory/EntryDialog";
 import { InventoryTable } from "@/components/inventory/InventoryTable";
 import { SearchCard } from "@/components/inventory/SearchCard";
 import { StatusStrip } from "@/components/inventory/StatusStrip";
-import { Button } from "@/components/ui/button";
+import {
+  COLOR_ROWS_STORAGE_KEY,
+  COLUMN_VISIBILITY_STORAGE_KEY,
+  DESKTOP_SHARED_PENDING_STATUS,
+  MOCK_SHARED_STATUS,
+  THEME_STORAGE_KEY,
+  buildDefaultStatusMessage,
+  buildIdleUpdateState,
+  buildLocalCreatedEntry,
+  buildLocalUpdatedEntry,
+  chooseFreshUpdateState,
+  clampSharedSyncIntervalMs,
+  hasDesktopBridge,
+  normalizeSharedStatus,
+  readColorRows,
+  readColumnVisibility,
+  readTheme,
+  sharedStatusesMatch,
+} from "@/components/inventory/shell/helpers";
 import { MOCK_INVENTORY } from "@/data/mockInventory";
 import { toSafeExternalUrl } from "@/lib/externalUrl";
 import {
   DEFAULT_FILTERS,
-  buildDefaultColumnVisibility,
   buildResultsLabel,
   filterEntries,
   getInventoryCounts,
   getVisibleColumns,
   getVisibleDataColumnCount,
-  mergeColumnVisibility,
   sortEntries,
 } from "@/lib/inventory";
 import { INVENTORY_COLUMNS } from "@/types/inventory";
@@ -38,27 +55,6 @@ import type {
 } from "@/types/inventory";
 import type { InventorySyncResult } from "@/types/desktop-bridge";
 
-const THEME_STORAGE_KEY = "meInventory.theme";
-const COLOR_ROWS_STORAGE_KEY = "meInventory.colorRows";
-const COLUMN_VISIBILITY_STORAGE_KEY = "meInventory.columnVisibility";
-const DEFAULT_SHARED_SYNC_INTERVAL_MS = 60_000;
-const MIN_SHARED_SYNC_INTERVAL_MS = 30_000;
-const MAX_SHARED_SYNC_INTERVAL_MS = 5 * 60_000;
-const MOCK_SHARED_STATUS: InventorySharedStatus = {
-  available: true,
-  canModify: true,
-  enabled: false,
-  message: "",
-  mutationMode: "shared",
-};
-const DESKTOP_SHARED_PENDING_STATUS: InventorySharedStatus = {
-  available: false,
-  canModify: false,
-  enabled: false,
-  message: "Checking shared workspace...",
-  mutationMode: "local",
-  syncIntervalMs: DEFAULT_SHARED_SYNC_INTERVAL_MS,
-};
 interface DialogState {
   mode: "add" | "edit";
   entryId?: string;
@@ -846,156 +842,6 @@ export function InventoryShell() {
   );
 }
 
-interface DeleteConfirmationDialogProps {
-  entry: InventoryEntry;
-  onCancel: () => void;
-  onConfirm: () => void;
-}
-
-function DeleteConfirmationDialog({ entry, onCancel, onConfirm }: DeleteConfirmationDialogProps) {
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === "Escape") {
-        onCancel();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel]);
-
-  const title = entry.description || entry.manufacturer || entry.model || `ID ${entry.id}`;
-
-  return (
-    <div
-      aria-modal="true"
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/45 p-4"
-      role="dialog"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onCancel();
-        }
-      }}
-    >
-      <section className="w-full max-w-md rounded-2xl border border-border/70 bg-card p-5 text-card-foreground shadow-2xl">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-destructive-foreground">Delete Entry</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-foreground">Delete this entry?</h2>
-          <p className="mt-3 text-sm text-muted-foreground">
-            This removes the entry from the inventory database.
-          </p>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-border/70 bg-background/70 px-4 py-3">
-          <p className="text-sm font-medium text-foreground">{title}</p>
-          {entry.assetNumber || entry.location ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {[entry.assetNumber, entry.location].filter(Boolean).join(" | ")}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button className="border-destructive bg-destructive text-white hover:bg-destructive/90" onClick={onConfirm}>
-            Delete Entry
-          </Button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function buildIdleUpdateState(): UpdateState {
-  return {
-    available: false,
-    currentVersion: APP_VERSION,
-    status: "idle",
-  };
-}
-
-function chooseFreshUpdateState(current: UpdateState, next: UpdateState): UpdateState {
-  if (current.latestVersion && current.latestVersion === next.latestVersion) {
-    return getUpdateStatusRank(current.status) > getUpdateStatusRank(next.status) ? current : next;
-  }
-
-  return next;
-}
-
-function getUpdateStatusRank(status: UpdateState["status"]): number {
-  switch (status) {
-    case "idle":
-      return 0;
-    case "checking":
-      return 1;
-    case "not-available":
-      return 2;
-    case "available":
-      return 3;
-    case "downloading":
-      return 4;
-    case "ready":
-      return 5;
-    case "installing":
-      return 6;
-    case "error":
-      return 7;
-    default:
-      return 0;
-  }
-}
-
-function sharedStatusesMatch(left: InventorySharedStatus, right: InventorySharedStatus): boolean {
-  return (
-    left.available === right.available &&
-    left.canModify === right.canModify &&
-    left.enabled === right.enabled &&
-    left.hasLocalOnlyChanges === right.hasLocalOnlyChanges &&
-    left.message === right.message &&
-    left.mutationMode === right.mutationMode &&
-    left.revision === right.revision &&
-    left.sharedDbPath === right.sharedDbPath &&
-    left.sharedRootPath === right.sharedRootPath &&
-    left.syncIntervalMs === right.syncIntervalMs
-  );
-}
-
-function normalizeSharedStatus(status: InventorySharedStatus): InventorySharedStatus {
-  if (status.syncIntervalMs === undefined) {
-    return status;
-  }
-
-  const syncIntervalMs = clampSharedSyncIntervalMs(status.syncIntervalMs);
-  return syncIntervalMs === status.syncIntervalMs ? status : { ...status, syncIntervalMs };
-}
-
-function clampSharedSyncIntervalMs(syncIntervalMs: number | undefined): number {
-  if (typeof syncIntervalMs !== "number" || !Number.isFinite(syncIntervalMs)) {
-    return DEFAULT_SHARED_SYNC_INTERVAL_MS;
-  }
-
-  return Math.min(MAX_SHARED_SYNC_INTERVAL_MS, Math.max(MIN_SHARED_SYNC_INTERVAL_MS, syncIntervalMs));
-}
-
-function hasDesktopBridge(): boolean {
-  return typeof window !== "undefined" && Boolean(window.inventoryDesktop?.isDesktop);
-}
-
-function buildDefaultStatusMessage(
-  totalCount: number,
-  verifiedCount: number,
-  dataSource: "desktop" | "mock",
-  sharedStatus: InventorySharedStatus,
-): string {
-  const summary = `Total: ${totalCount} | Verified: ${verifiedCount}/${totalCount}`;
-  if (dataSource !== "desktop" || !sharedStatus.message) {
-    return summary;
-  }
-  return `${summary} | ${sharedStatus.message}`;
-}
-
 async function openExternalUrl(url: string): Promise<boolean> {
   const externalUrl = toSafeExternalUrl(url, { allowImplicitHttps: false });
   if (!externalUrl) {
@@ -1008,92 +854,4 @@ async function openExternalUrl(url: string): Promise<boolean> {
 
   window.open(externalUrl, "_blank", "noopener,noreferrer");
   return true;
-}
-
-function buildLocalCreatedEntry(input: InventoryEntryInput): InventoryEntry {
-  const timestamp = new Date().toISOString();
-
-  return {
-    id: `local-${Date.now()}`,
-    entryUuid: "",
-    assetNumber: input.assetNumber,
-    serialNumber: input.serialNumber,
-    qty: input.qty,
-    manufacturer: input.manufacturer,
-    model: input.model,
-    description: input.description,
-    projectName: input.projectName,
-    location: input.location,
-    assignedTo: input.assignedTo,
-    links: input.links,
-    notes: input.notes,
-    lifecycleStatus: input.lifecycleStatus,
-    workingStatus: input.workingStatus,
-    condition: input.condition,
-    verifiedInSurvey: input.verifiedInSurvey,
-    archived: input.archived,
-    manualEntry: true,
-    picturePath: input.picturePath ?? "",
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-}
-
-function buildLocalUpdatedEntry(existingEntry: InventoryEntry, input: InventoryEntryInput): InventoryEntry {
-  return {
-    ...existingEntry,
-    assetNumber: input.assetNumber,
-    serialNumber: input.serialNumber,
-    qty: input.qty,
-    manufacturer: input.manufacturer,
-    model: input.model,
-    description: input.description,
-    projectName: input.projectName,
-    location: input.location,
-    assignedTo: input.assignedTo,
-    links: input.links,
-    notes: input.notes,
-    lifecycleStatus: input.lifecycleStatus,
-    workingStatus: input.workingStatus,
-    condition: input.condition,
-    verifiedInSurvey: input.verifiedInSurvey,
-    archived: input.archived,
-    picturePath: input.picturePath ?? "",
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function readTheme(): ThemeMode {
-  if (typeof window === "undefined") {
-    return "light";
-  }
-
-  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return storedTheme === "dark" ? "dark" : "light";
-}
-
-function readColorRows(): boolean {
-  if (typeof window === "undefined") {
-    return true;
-  }
-
-  const storedValue = window.localStorage.getItem(COLOR_ROWS_STORAGE_KEY);
-  return storedValue == null ? true : storedValue === "true";
-}
-
-function readColumnVisibility(): Record<ColumnKey, boolean> {
-  if (typeof window === "undefined") {
-    return buildDefaultColumnVisibility();
-  }
-
-  const storedValue = window.localStorage.getItem(COLUMN_VISIBILITY_STORAGE_KEY);
-  if (!storedValue) {
-    return buildDefaultColumnVisibility();
-  }
-
-  try {
-    return mergeColumnVisibility(JSON.parse(storedValue) as Partial<Record<ColumnKey, boolean>>);
-  } catch {
-    return buildDefaultColumnVisibility();
-  }
 }
