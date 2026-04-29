@@ -33,7 +33,7 @@ Committed cleanup slices:
 - legacy import helper split
 - unused layout component removal
 Pending worktree at this checkpoint:
-- Phase 11 sync test split
+- clean after final validation and closeout commit
 ```
 
 ## Current Constraints
@@ -99,9 +99,9 @@ Pending worktree at this checkpoint:
 
 ## Phase 4: Checkpoint Current Work
 
-- [~] Stage or commit README/doc consolidation.
-- [~] Stage or commit frontend cleanup and extracted folders.
-- [~] Include `AGENT_RUNBOOK.md` and `CLEANUP_CHECKLIST.md` when staging.
+- [x] Stage or commit README/doc consolidation.
+- [x] Stage or commit frontend cleanup and extracted folders.
+- [x] Include `AGENT_RUNBOOK.md` and `CLEANUP_CHECKLIST.md` when staging.
 - [x] Re-run frontend validation after staging.
 - [x] Confirm generated artifacts are not staged.
 - [x] Confirm imported files and extracted modules are staged together.
@@ -117,7 +117,7 @@ Pending worktree at this checkpoint:
 
 ## Phase 6: Dead Code And Deferred Features
 
-- [~] Inventory placeholders, scaffolds, disabled paths, and deferred features.
+- [x] Inventory placeholders, scaffolds, disabled paths, and deferred features.
 - [x] Keep HTML export visible as an explicit placeholder with test coverage.
 - [x] Replace updater no-op/event scaffolding with signed Tauri updater progress events.
 - [x] Review mock/browser fallback paths and keep only intentional dev/demo behavior.
@@ -130,7 +130,7 @@ Pending worktree at this checkpoint:
 - [x] Review `InventoryHeader.tsx` for menu/action extraction.
 - [x] Review `src/lib/inventory.ts` for testable helper boundaries.
 - [x] Split oversized frontend tests if they slow future edits, especially `inventory-shell.test.tsx`.
-- [ ] Preserve visible UI behavior, public props, localStorage keys, and Tauri bridge calls.
+- [x] Preserve visible UI behavior, public props, localStorage keys, and Tauri bridge calls.
 - [x] Run targeted frontend tests after each completed slice.
 
 ## Phase 8: Performance Optimization
@@ -172,9 +172,9 @@ Pending worktree at this checkpoint:
 
 - [x] Split oversized sync tests after Rust module boundaries settle.
 - [x] Keep one-machine sync smoke documented and runnable.
-- [ ] Add or retain packaged smoke checklist before release.
-- [ ] Track validation commands and results after every cleanup slice.
-- [ ] Record any skipped validation with the reason.
+- [x] Add or retain packaged smoke checklist before release.
+- [x] Track validation commands and results after every cleanup slice.
+- [x] Record any skipped validation with the reason.
 
 ## Phase 12: Architecture And Release Decisions
 
@@ -190,7 +190,7 @@ Pending worktree at this checkpoint:
 - [x] Assign strict file ownership before spawning workers.
 - [x] Manager owns checklist updates, integration, validation, and final review.
 - [x] Spawn a read-only reviewer for large combined diffs.
-- [ ] Record each future worker assignment and result here.
+- [x] Record each future worker assignment and result here.
 
 ## Worker Log
 
@@ -207,6 +207,7 @@ Pending worktree at this checkpoint:
 - [x] Worker Lovelace: Phase 10 native helper cleanup, completed and committed.
 - [x] Worker Hegel: Phase 9 store split, completed and integrated with sync split.
 - [x] Worker Lagrange: Phase 9 sync split, completed and integrated with store split.
+- [x] Worker Carver: Phase 11 sync test split, completed and committed.
 
 ## Validation Results
 
@@ -261,10 +262,20 @@ Pending worktree at this checkpoint:
 - Phase 9 store/sync split `cargo test --test shared_sync_flow`: pass, 21 tests.
 - Phase 11 sync test split `cargo test --test shared_sync_flow`: pass, 13 tests.
 - Phase 11 sync test split `cargo test --test sync_conflict_flow`: pass, 15 tests.
+- Final `& "$env:USERPROFILE\.bun\bin\bun.exe" run lint`: pass.
+- Final `& "$env:USERPROFILE\.bun\bin\bun.exe" run test`: pass, 7 files passed / 1 skipped, 60 tests passed / 1 skipped.
+- Final `& "$env:USERPROFILE\.bun\bin\bun.exe" run build`: pass.
+- Final `cargo check`: pass.
+- Final `cargo test`: pass, 36 unit tests, 12 performance harness tests plus 1 ignored benchmark, 13 shared sync tests, 15 sync conflict tests, 15 sync core tests, and doc tests.
+- Final `scripts\smoke-sync-one-machine.ps1`: pass; clients converged, stale update logged as conflict, delete and newer restore succeeded.
+
+## Skipped / Manual Validation
+
+- Packaged NSIS install smoke was not rerun in this cleanup branch; keep it as a manual release checkpoint.
+- Real signed GitHub Releases updater install was not run because it requires publishing a newer signed release asset.
+- Real shared-drive multi-machine sync and real legacy DB import remain manual release checkpoints.
 
 ## Next Recommended Slice
 
-- Run full frontend and Rust validation after the signed updater migration commit.
-- Start Phase 8 performance baselining before any query/index optimization.
-- Split `store.rs` and `sync.rs` only after performance baseline and query parity decisions are recorded.
-- Use `AGENT_RUNBOOK.md` to avoid repeating known command/tooling traps.
+- Fix the stale global Bun PowerShell shim outside the repo when convenient.
+- Run packaged NSIS, signed updater, shared-drive sync, and real legacy import manual smoke before the next release.
