@@ -1,11 +1,8 @@
-import { ArrowUpDownIcon, CheckIcon } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-import { toSafeExternalUrl } from "@/lib/externalUrl";
-import { formatLinkLabel } from "@/lib/inventory";
+import { InventoryTableBody } from "@/components/inventory/table/InventoryTableBody";
+import { InventoryTableColumnGroup, InventoryTableHeader } from "@/components/inventory/table/InventoryTableHeader";
+import { ROW_HEIGHT, clampScrollTop, getVisibleRange } from "@/components/inventory/table/virtualization";
 import type { ColumnConfig, InventoryEntry, SortState } from "@/types/inventory";
 
 interface InventoryTableProps {
@@ -21,9 +18,6 @@ interface InventoryTableProps {
   entries: InventoryEntry[];
   sortState: SortState;
 }
-
-const ROW_HEIGHT = 45;
-const OVERSCAN_ROWS = 10;
 
 export const InventoryTable = memo(function InventoryTable({
   activeEntryId = null,
@@ -90,232 +84,23 @@ export const InventoryTable = memo(function InventoryTable({
         }}
       >
         <table className="w-full table-fixed border-separate border-spacing-0">
-          <colgroup>
-            {columns.map((column) => (
-              <col key={column.key} style={getColumnStyle(column.key)} />
-            ))}
-          </colgroup>
-          <thead className="sticky top-0 z-10 bg-background">
-            <tr>
-              {columns.map((column) => (
-                <th
-                  key={column.key}
-                  className={cn(
-                    "border-b border-border px-2.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:px-4 sm:py-3",
-                    column.align === "center" ? "text-center" : "text-left",
-                  )}
-                  scope="col"
-                >
-                  {column.sortable ? (
-                    <button
-                      className={cn(
-                        "inline-flex min-w-0 max-w-full items-center gap-1 transition-colors hover:text-foreground",
-                        column.align === "center" ? "justify-center" : "",
-                        sortState.column === column.key ? "text-foreground" : "",
-                      )}
-                      type="button"
-                      onClick={() => onSortChange(column.key)}
-                    >
-                      <span>{column.label}</span>
-                      <ArrowUpDownIcon className="size-3.5" />
-                    </button>
-                  ) : (
-                    column.label
-                  )}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {topSpacerHeight > 0 ? <SpacerRow colSpan={columns.length} height={topSpacerHeight} /> : null}
-            {visibleEntries.map((entry) => (
-              <tr
-                key={entry.id}
-                className={cn(
-                  rowToneClass(entry, colorRows),
-                  activeEntryId === entry.id ? "ring-1 ring-inset ring-primary/25" : "",
-                  "cursor-default transition-colors hover:bg-accent/35",
-                )}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  onOpenContextMenu(entry.id, event.clientX, event.clientY);
-                }}
-                onDoubleClick={(event) => {
-                  if (event.target instanceof Element && event.target.closest("button,a,input")) {
-                    return;
-                  }
-                  onOpenEntry(entry.id);
-                }}
-              >
-                {columns.map((column) => (
-                  <td
-                    key={`${entry.id}-${column.key}`}
-                    className={cn(
-                      "border-b border-border/60 px-2.5 py-2.5 text-sm text-foreground/92 sm:px-4 sm:py-3",
-                      column.align === "center" ? "text-center" : "text-left",
-                    )}
-                  >
-                    {renderCell(entry, column, onToggleVerified, canModifyEntries, onOpenExternalLink)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-            {bottomSpacerHeight > 0 ? <SpacerRow colSpan={columns.length} height={bottomSpacerHeight} /> : null}
-          </tbody>
+          <InventoryTableColumnGroup columns={columns} />
+          <InventoryTableHeader columns={columns} sortState={sortState} onSortChange={onSortChange} />
+          <InventoryTableBody
+            activeEntryId={activeEntryId}
+            bottomSpacerHeight={bottomSpacerHeight}
+            canModifyEntries={canModifyEntries}
+            colorRows={colorRows}
+            columns={columns}
+            topSpacerHeight={topSpacerHeight}
+            visibleEntries={visibleEntries}
+            onOpenContextMenu={onOpenContextMenu}
+            onOpenEntry={onOpenEntry}
+            onOpenExternalLink={onOpenExternalLink}
+            onToggleVerified={onToggleVerified}
+          />
         </table>
       </div>
     </section>
   );
 });
-
-function getVisibleRange(entryCount: number, scrollTop: number, viewportHeight: number): { end: number; start: number } {
-  const safeEntryCount = getSafeEntryCount(entryCount);
-  if (safeEntryCount === 0) {
-    return { end: 0, start: 0 };
-  }
-
-  const safeViewportHeight = getSafeViewportHeight(viewportHeight);
-  const safeScrollTop = clampScrollTop(scrollTop, safeEntryCount, safeViewportHeight);
-  const firstVisibleRow = Math.min(safeEntryCount - 1, Math.floor(safeScrollTop / ROW_HEIGHT));
-  const visibleRowCount = Math.max(1, Math.ceil(safeViewportHeight / ROW_HEIGHT));
-  const start = Math.max(0, firstVisibleRow - OVERSCAN_ROWS);
-
-  return {
-    end: Math.min(safeEntryCount, firstVisibleRow + visibleRowCount + OVERSCAN_ROWS),
-    start,
-  };
-}
-
-function clampScrollTop(scrollTop: number, entryCount: number, viewportHeight: number): number {
-  const safeScrollTop = Number.isFinite(scrollTop) ? Math.max(0, scrollTop) : 0;
-  return Math.min(safeScrollTop, getMaxScrollTop(entryCount, viewportHeight));
-}
-
-function getMaxScrollTop(entryCount: number, viewportHeight: number): number {
-  const safeEntryCount = getSafeEntryCount(entryCount);
-  return Math.max(0, safeEntryCount * ROW_HEIGHT - getSafeViewportHeight(viewportHeight));
-}
-
-function getSafeEntryCount(entryCount: number): number {
-  return Number.isFinite(entryCount) ? Math.max(0, Math.floor(entryCount)) : 0;
-}
-
-function getSafeViewportHeight(viewportHeight: number): number {
-  return Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : ROW_HEIGHT;
-}
-
-function SpacerRow({ colSpan, height }: { colSpan: number; height: number }) {
-  return (
-    <tr aria-hidden="true">
-      <td colSpan={colSpan} style={{ height, padding: 0 }} />
-    </tr>
-  );
-}
-
-function renderCell(
-  entry: InventoryEntry,
-  column: ColumnConfig,
-  onToggleVerified: (entryId: string) => void,
-  canModifyEntries: boolean,
-  onOpenExternalLink: (url: string) => void,
-) {
-  switch (column.key) {
-    case "verified":
-      return (
-        <button
-          aria-label={`Toggle verified for ${entry.description}`}
-          className="inline-flex items-center justify-center"
-          disabled={!canModifyEntries}
-          type="button"
-          onClick={() => onToggleVerified(entry.id)}
-        >
-          <Badge size="sm" variant={entry.verifiedInSurvey ? "success" : "outline"}>
-            {entry.verifiedInSurvey ? <CheckIcon className="size-3" /> : null}
-            {entry.verifiedInSurvey ? "Verified" : "Pending"}
-          </Badge>
-        </button>
-      );
-    case "assetNumber":
-      return renderText(entry.assetNumber);
-    case "qty":
-      return renderText(entry.qty == null ? "" : String(entry.qty));
-    case "manufacturer":
-      return renderText(entry.manufacturer);
-    case "model":
-      return renderText(entry.model);
-    case "description":
-      return renderText(entry.description);
-    case "projectName":
-      return renderText(entry.projectName);
-    case "location":
-      return renderText(entry.location);
-    case "links": {
-      const label = formatLinkLabel(entry.links);
-      if (!label) {
-        return renderText("");
-      }
-      const safeUrl = toSafeExternalUrl(entry.links);
-      if (!safeUrl) {
-        return renderText(entry.links.trim());
-      }
-      return (
-        <a
-          className="inline-block max-w-full truncate font-mono text-xs text-foreground underline decoration-border underline-offset-4 transition-colors hover:text-primary"
-          href={safeUrl}
-          rel="noreferrer"
-          title={safeUrl}
-          onClick={(event) => {
-            event.preventDefault();
-            onOpenExternalLink(safeUrl);
-          }}
-        >
-          {label}
-        </a>
-      );
-    }
-  }
-}
-
-function renderText(value: string) {
-  if (!value.trim()) {
-    return <span className="text-muted-foreground">-</span>;
-  }
-  return (
-    <span className="block min-w-0 truncate" title={value}>
-      {value}
-    </span>
-  );
-}
-
-function rowToneClass(entry: InventoryEntry, colorRows: boolean): string {
-  if (!colorRows) {
-    return "bg-transparent";
-  }
-
-  switch (entry.lifecycleStatus) {
-    case "active":
-      return "bg-success/10";
-    case "repair":
-      return "bg-warning/10";
-    case "scrapped":
-    case "missing":
-      return "bg-destructive/10";
-    case "rental":
-      return "bg-accent/60";
-  }
-}
-
-function getColumnStyle(columnKey: ColumnConfig["key"]): CSSProperties {
-  switch (columnKey) {
-    case "verified":
-      return { width: "4.75rem" };
-    case "qty":
-      return { width: "3.75rem" };
-    case "assetNumber":
-      return { width: "7rem" };
-    case "projectName":
-      return { width: "8.5rem" };
-    default:
-      return {};
-  }
-}
