@@ -1,15 +1,8 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    fs,
-    hash::{Hash, Hasher},
-    path::{Path, PathBuf},
-    time::UNIX_EPOCH,
-};
+use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
-use url::Url;
 
 use crate::model::CommandResult;
 
@@ -73,136 +66,204 @@ pub(crate) async fn pick_picture_path(app: AppHandle) -> CommandResult<Option<St
 }
 
 fn build_picture_preview_file(value: &str, cache_root: &Path) -> CommandResult<Option<String>> {
-    let Ok(path) = normalize_picture_path(value) else {
-        return Ok(None);
-    };
-
-    if !path.is_file() {
-        return Ok(None);
-    }
-
-    let metadata = fs::metadata(&path).map_err(|error| error.to_string())?;
-    if metadata.len() > MAX_PREVIEW_SOURCE_BYTES {
-        return Ok(None);
-    }
-
-    let preview_cache_dir = cache_root.join(PREVIEW_CACHE_DIR_NAME);
-    fs::create_dir_all(&preview_cache_dir).map_err(|error| error.to_string())?;
-
-    let extension = path
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .unwrap_or("img")
-        .to_ascii_lowercase();
-    let fingerprint = picture_preview_fingerprint(&path, &metadata);
-    let destination = preview_cache_dir.join(format!("{fingerprint:016x}.{extension}"));
-
-    if !destination.is_file() {
-        let temp_destination = preview_cache_dir.join(format!(
-            "{fingerprint:016x}.tmp-{}",
-            uuid::Uuid::new_v4().simple()
-        ));
-
-        fs::copy(&path, &temp_destination).map_err(|error| error.to_string())?;
-        if let Err(error) = fs::rename(&temp_destination, &destination) {
-            if destination.is_file() {
-                let _ = fs::remove_file(&temp_destination);
-            } else {
-                let _ = fs::remove_file(&temp_destination);
-                return Err(error.to_string());
-            }
-        }
-    }
-
-    Ok(Some(destination.to_string_lossy().to_string()))
+    preview_cache::build_file(value, cache_root)
 }
 
 fn normalize_external_url(value: &str) -> Result<String, String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() || is_windows_local_path(trimmed) {
-        return Err("Invalid external URL.".to_string());
-    }
-
-    let parsed = Url::parse(trimmed).map_err(|_| "Invalid external URL.".to_string())?;
-    match parsed.scheme() {
-        "http" | "https" | "mailto" => Ok(parsed.to_string()),
-        _ => Err("Unsupported external URL protocol.".to_string()),
-    }
+    external_urls::normalize(value)
 }
 
 fn normalize_local_path(value: &str) -> Result<PathBuf, String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() || looks_like_url(trimmed) {
-        return Err("Invalid local path.".to_string());
-    }
-
-    let path = PathBuf::from(trimmed);
-    if !path.is_absolute() {
-        return Err("Local path must be absolute.".to_string());
-    }
-
-    Ok(path)
+    local_paths::normalize(value)
 }
 
 fn normalize_picture_path(value: &str) -> Result<PathBuf, String> {
-    let path = normalize_local_path(value)?;
-    let Some(extension) = path.extension().and_then(|extension| extension.to_str()) else {
-        return Err("Picture path must use a supported image extension.".to_string());
-    };
+    picture_paths::normalize(value)
+}
 
-    if IMAGE_FILTER_EXTENSIONS
-        .iter()
-        .any(|allowed| extension.eq_ignore_ascii_case(allowed))
-    {
-        Ok(path)
-    } else {
-        Err("Picture path must use a supported image extension.".to_string())
+mod external_urls {
+    use url::Url;
+
+    use super::local_paths;
+
+    pub(super) fn normalize(value: &str) -> Result<String, String> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() || local_paths::is_windows_local_path(trimmed) {
+            return Err("Invalid external URL.".to_string());
+        }
+
+        let parsed = Url::parse(trimmed).map_err(|_| "Invalid external URL.".to_string())?;
+        match parsed.scheme() {
+            "http" | "https" | "mailto" => Ok(parsed.to_string()),
+            _ => Err("Unsupported external URL protocol.".to_string()),
+        }
     }
 }
 
-fn picture_preview_fingerprint(path: &Path, metadata: &fs::Metadata) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    path.to_string_lossy()
-        .to_ascii_lowercase()
-        .hash(&mut hasher);
-    metadata.len().hash(&mut hasher);
+mod local_paths {
+    use std::path::PathBuf;
 
-    if let Ok(modified) = metadata.modified() {
-        if let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
-            duration.as_nanos().hash(&mut hasher);
+    pub(super) fn normalize(value: &str) -> Result<PathBuf, String> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() || looks_like_url(trimmed) {
+            return Err("Invalid local path.".to_string());
+        }
+
+        let path = PathBuf::from(trimmed);
+        if !path.is_absolute() {
+            return Err("Local path must be absolute.".to_string());
+        }
+
+        Ok(path)
+    }
+
+    pub(super) fn is_windows_local_path(value: &str) -> bool {
+        let bytes = value.as_bytes();
+        value.starts_with(r"\\")
+            || (bytes.len() >= 3
+                && bytes[0].is_ascii_alphabetic()
+                && bytes[1] == b':'
+                && matches!(bytes[2], b'\\' | b'/'))
+    }
+
+    fn looks_like_url(value: &str) -> bool {
+        if is_windows_local_path(value) {
+            return false;
+        }
+
+        let Some((scheme, _)) = value.split_once(':') else {
+            return false;
+        };
+
+        !scheme.is_empty()
+            && scheme.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
+            })
+    }
+}
+
+mod picture_paths {
+    use std::path::PathBuf;
+
+    use super::{normalize_local_path, IMAGE_FILTER_EXTENSIONS};
+
+    pub(super) fn normalize(value: &str) -> Result<PathBuf, String> {
+        let path = normalize_local_path(value)?;
+        let Some(extension) = path.extension().and_then(|extension| extension.to_str()) else {
+            return Err(unsupported_extension_error());
+        };
+
+        if is_supported_extension(extension) {
+            Ok(path)
+        } else {
+            Err(unsupported_extension_error())
         }
     }
 
-    hasher.finish()
-}
-
-fn looks_like_url(value: &str) -> bool {
-    if is_windows_local_path(value) {
-        return false;
+    fn is_supported_extension(extension: &str) -> bool {
+        IMAGE_FILTER_EXTENSIONS
+            .iter()
+            .any(|allowed| extension.eq_ignore_ascii_case(allowed))
     }
 
-    let Some((scheme, _)) = value.split_once(':') else {
-        return false;
-    };
-
-    !scheme.is_empty()
-        && scheme.chars().all(|character| {
-            character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
-        })
+    fn unsupported_extension_error() -> String {
+        "Picture path must use a supported image extension.".to_string()
+    }
 }
 
-fn is_windows_local_path(value: &str) -> bool {
-    let bytes = value.as_bytes();
-    value.starts_with(r"\\")
-        || (bytes.len() >= 3
-            && bytes[0].is_ascii_alphabetic()
-            && bytes[1] == b':'
-            && matches!(bytes[2], b'\\' | b'/'))
+mod preview_cache {
+    use std::{
+        collections::hash_map::DefaultHasher,
+        fs,
+        hash::{Hash, Hasher},
+        path::{Path, PathBuf},
+        time::UNIX_EPOCH,
+    };
+
+    use crate::model::CommandResult;
+
+    use super::{normalize_picture_path, MAX_PREVIEW_SOURCE_BYTES, PREVIEW_CACHE_DIR_NAME};
+
+    pub(super) fn build_file(value: &str, cache_root: &Path) -> CommandResult<Option<String>> {
+        let Ok(path) = normalize_picture_path(value) else {
+            return Ok(None);
+        };
+
+        if !path.is_file() {
+            return Ok(None);
+        }
+
+        let metadata = fs::metadata(&path).map_err(|error| error.to_string())?;
+        if metadata.len() > MAX_PREVIEW_SOURCE_BYTES {
+            return Ok(None);
+        }
+
+        let preview_cache_dir = cache_root.join(PREVIEW_CACHE_DIR_NAME);
+        fs::create_dir_all(&preview_cache_dir).map_err(|error| error.to_string())?;
+
+        let destination = preview_destination(&path, &metadata, &preview_cache_dir);
+        copy_preview_source_once(&path, &destination)?;
+
+        Ok(Some(destination.to_string_lossy().to_string()))
+    }
+
+    fn preview_destination(path: &Path, metadata: &fs::Metadata, cache_dir: &Path) -> PathBuf {
+        let extension = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .unwrap_or("img")
+            .to_ascii_lowercase();
+        let fingerprint = picture_preview_fingerprint(path, metadata);
+
+        cache_dir.join(format!("{fingerprint:016x}.{extension}"))
+    }
+
+    fn copy_preview_source_once(source: &Path, destination: &Path) -> Result<(), String> {
+        if destination.is_file() {
+            return Ok(());
+        }
+
+        let temp_destination = destination.with_file_name(format!(
+            "{}.tmp-{}",
+            destination
+                .file_stem()
+                .and_then(|file_stem| file_stem.to_str())
+                .unwrap_or("preview"),
+            uuid::Uuid::new_v4().simple()
+        ));
+
+        fs::copy(source, &temp_destination).map_err(|error| error.to_string())?;
+        if let Err(error) = fs::rename(&temp_destination, destination) {
+            let _ = fs::remove_file(&temp_destination);
+            if !destination.is_file() {
+                return Err(error.to_string());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn picture_preview_fingerprint(path: &Path, metadata: &fs::Metadata) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        path.to_string_lossy()
+            .to_ascii_lowercase()
+            .hash(&mut hasher);
+        metadata.len().hash(&mut hasher);
+
+        if let Ok(modified) = metadata.modified() {
+            if let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
+                duration.as_nanos().hash(&mut hasher);
+            }
+        }
+
+        hasher.finish()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn external_urls_allow_only_safe_protocols() {
