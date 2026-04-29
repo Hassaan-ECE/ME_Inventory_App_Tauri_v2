@@ -78,6 +78,8 @@ rustup component add rustfmt
 - Public key sidecar was generated at `%USERPROFILE%\.tauri\me-inventory-updater.key.pub`.
 - Do not commit private key material, passwords, generated `.sig` files, release bundles, or `latest.json` drafts unless the user explicitly asks for release asset staging.
 - The current key was generated without a password after the CLI rejected the empty-password flag form. Rotate the key before broad distribution if policy requires password-protected signing keys.
+- For the current Tauri CLI, signing expects `TAURI_SIGNING_PRIVATE_KEY` to contain the private key text. `TAURI_SIGNING_PRIVATE_KEY_PATH` was not accepted during the `0.9.8` package build.
+- Because the current key is unpassworded, set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to an explicit empty string for non-interactive builds; otherwise the signer can wait for password input after producing the NSIS installer.
 
 ### Untracked Extracted Folders
 

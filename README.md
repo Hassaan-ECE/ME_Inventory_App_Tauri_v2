@@ -243,8 +243,12 @@ bun tauri build --bundles nsis
 For signed updater releases, build with the updater private key available outside the repo:
 
 ```powershell
-$env:TAURI_SIGNING_PRIVATE_KEY_PATH = "$env:USERPROFILE\.tauri\me-inventory-updater.key"
+$env:PATH = "$env:USERPROFILE\.bun\bin;$env:PATH"
+$env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content -LiteralPath "$env:USERPROFILE\.tauri\me-inventory-updater.key" -Raw).Trim()
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
 bun tauri build --bundles nsis
+Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY
+Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ```
 
 Publish the generated NSIS installer, its `.sig` file, and a GitHub Release asset named `latest.json`. Static updater metadata must include the Tauri updater fields for the Windows platform:
