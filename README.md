@@ -261,7 +261,7 @@ Publish the generated NSIS installer, its `.sig` file, and a GitHub Release asse
   "platforms": {
     "windows-x86_64": {
       "signature": "contents of the generated .sig file",
-      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v0.9.8/ME_Inventory_0.9.8_x64-setup.exe"
+      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v0.9.8/ME%20Inventory_0.9.8_x64-setup.exe"
     }
   }
 }
