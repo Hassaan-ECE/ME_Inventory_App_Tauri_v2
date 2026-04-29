@@ -12,7 +12,7 @@ This README is the canonical project doc. Older planning notes, smoke logs, and 
 
 - Active workspace: `c:\Projects\Active\ME_Inventory_App_Tauri_v2`
 - App name: `ME Inventory`
-- Display name: `ME Inventory v0.9.7`
+- Display name: `ME Inventory v0.9.8`
 - Version source: `package.json`, `src-tauri\Cargo.toml`, and `src-tauri\tauri.conf.json`
 - Tauri identifier: `com.me.inventory`
 - Install mode: current-user NSIS install
@@ -20,7 +20,7 @@ This README is the canonical project doc. Older planning notes, smoke logs, and 
 - Runtime database: local FeOxDB file named `inventory.feox`
 - Legacy SQLite role: read-only first-run import source only
 
-Version note: `0.9.7` is the current source truth for this release checkpoint.
+Version note: `0.9.8` is the current source truth for this release checkpoint.
 
 ## What Works Now
 
@@ -317,7 +317,7 @@ Manual exercise:
 
 ## Open Work
 
-- Bump or reconcile the source version when preparing the next release after `0.9.7`.
+- Bump or reconcile the source version when preparing the next release after `0.9.8`.
 - Validate the signed GitHub Releases updater path with a real release asset.
 - Finish shared sync snapshots, manifest validation, single-writer compaction, conflict UI, locked-file smoke, and shared media storage.
 - Decide whether entries should move from the current compatibility projection to future `inventory:item:*` and ledger keyspaces.
