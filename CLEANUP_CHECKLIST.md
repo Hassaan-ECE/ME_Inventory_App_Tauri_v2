@@ -33,7 +33,7 @@ Committed cleanup slices:
 - legacy import helper split
 - unused layout component removal
 Pending worktree at this checkpoint:
-- Phase 7 header split
+- Phase 7 shell test split
 - Phase 9 Rust store/sync split workers in progress
 ```
 
@@ -130,7 +130,7 @@ Pending worktree at this checkpoint:
 - [x] Review `InventoryTable.tsx` for smaller helpers or components.
 - [x] Review `InventoryHeader.tsx` for menu/action extraction.
 - [x] Review `src/lib/inventory.ts` for testable helper boundaries.
-- [ ] Split oversized frontend tests if they slow future edits, especially `inventory-shell.test.tsx`.
+- [x] Split oversized frontend tests if they slow future edits, especially `inventory-shell.test.tsx`.
 - [ ] Preserve visible UI behavior, public props, localStorage keys, and Tauri bridge calls.
 - [x] Run targeted frontend tests after each completed slice.
 
@@ -250,6 +250,8 @@ Pending worktree at this checkpoint:
 - Phase 8 frontend baseline `RUN_PERF_BASELINE=1` `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- scripts/performance-baseline.test.tsx`: pass. 10k local filter/sort median 3.953 ms; table render median 7.172 ms; scroll update median 4.946 ms.
 - Phase 7 header split `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-shell.test.tsx`: pass, 1 file / 24 tests.
 - Phase 7 header split `& "$env:USERPROFILE\.bun\bin\bun.exe" run lint`: pass.
+- Phase 7 shell test split `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-shell.test.tsx src/test/tauri-inventory-bridge.test.ts`: pass, 2 files / 24 tests.
+- Phase 7 shell test split `& "$env:USERPROFILE\.bun\bin\bun.exe" run lint`: pass.
 
 ## Next Recommended Slice
 
