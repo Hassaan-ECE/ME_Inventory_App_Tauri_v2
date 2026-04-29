@@ -33,8 +33,8 @@ Committed cleanup slices:
 - legacy import helper split
 - unused layout component removal
 Pending worktree at this checkpoint:
-- Phase 8 performance harnesses and baseline note
-- backend query parity test/fix for broader search and blank sorting
+- Phase 7 header split
+- Phase 9 Rust store/sync split workers in progress
 ```
 
 ## Current Constraints
@@ -128,7 +128,7 @@ Pending worktree at this checkpoint:
 ## Phase 7: Remaining Frontend Restructure
 
 - [x] Review `InventoryTable.tsx` for smaller helpers or components.
-- [ ] Review `InventoryHeader.tsx` for menu/action extraction.
+- [x] Review `InventoryHeader.tsx` for menu/action extraction.
 - [x] Review `src/lib/inventory.ts` for testable helper boundaries.
 - [ ] Split oversized frontend tests if they slow future edits, especially `inventory-shell.test.tsx`.
 - [ ] Preserve visible UI behavior, public props, localStorage keys, and Tauri bridge calls.
@@ -248,6 +248,8 @@ Pending worktree at this checkpoint:
 - Signed updater migration `git diff --check`: pass, with CRLF normalization warnings only.
 - Phase 8 backend baseline `cargo test --test performance_baseline -- --ignored --nocapture`: pass. 10k median `load_entries` 141.043 ms; 10k median query equivalent 216.612 ms; 10k in-memory query 55.854 ms.
 - Phase 8 frontend baseline `RUN_PERF_BASELINE=1` `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- scripts/performance-baseline.test.tsx`: pass. 10k local filter/sort median 3.953 ms; table render median 7.172 ms; scroll update median 4.946 ms.
+- Phase 7 header split `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-shell.test.tsx`: pass, 1 file / 24 tests.
+- Phase 7 header split `& "$env:USERPROFILE\.bun\bin\bun.exe" run lint`: pass.
 
 ## Next Recommended Slice
 
