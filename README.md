@@ -1,6 +1,6 @@
 # ME Inventory
 
-Last consolidated: 2026-04-28
+Last consolidated: 2026-04-29
 
 ME Inventory is a Windows desktop inventory app built with Tauri 2, React 19, TypeScript, Vite, Tailwind CSS v4, Bun, Rust, and FeOxDB.
 
@@ -16,6 +16,7 @@ This README is the canonical project doc. Older planning notes, smoke logs, and 
 - Version source: `package.json`, `src-tauri\Cargo.toml`, and `src-tauri\tauri.conf.json`
 - Tauri identifier: `com.me.inventory`
 - Install mode: current-user NSIS install
+- Updater: signed Tauri updater with GitHub Releases static metadata
 - Runtime database: local FeOxDB file named `inventory.feox`
 - Legacy SQLite role: read-only first-run import source only
 
@@ -134,34 +135,21 @@ The app has the first shared-drive operation-log sync layer.
 
 Shared sync is not complete yet. Snapshots, manifest publishing, single-writer compaction, conflict UI, shared media storage, and multi-machine release smoke remain open.
 
-### Custom Shared-Drive Updater
+### Signed Tauri Updater
 
-The current updater is a custom shared-drive installer updater, not the signed Tauri updater.
+The app uses the official signed Tauri updater. Update metadata is expected at:
 
-- Update root resolution:
-  - `ME_INVENTORY_UPDATE_ROOT`
-  - fallback: `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME`
-- Manifest path: `<update root>\current.json`
-- Manifest shape:
-
-```json
-{
-  "version": "0.9.7",
-  "installer_path": "releases/0.9.7/ME Inventory Setup 0.9.7.exe",
-  "sha256": "expected installer hash",
-  "notes": "Release notes",
-  "published_at": "2026-04-28T00:00:00-05:00"
-}
+```text
+https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/latest/download/latest.json
 ```
 
-- `check_for_update` compares manifest version to the current Cargo package version.
-- Missing or invalid manifest data reports no available update instead of blocking inventory use.
-- `download_update` copies the installer into the app cache and verifies SHA-256.
-- Hash mismatch removes the cached installer and returns an error state.
-- `install_update` verifies the cached installer again and launches it.
-- `onUpdateStateChanged` is still a no-op event hook.
+- `src-tauri\tauri.conf.json` stores the updater public key and endpoint.
+- The private signing key is generated outside the repo at `%USERPROFILE%\.tauri\me-inventory-updater.key`.
+- The private key and password must never be committed.
+- `bundle.createUpdaterArtifacts` is enabled so release builds produce updater artifacts and signatures.
+- The frontend keeps the existing `UpdateState` shape and receives real download progress events.
 
-The remaining updater work is signing, release artifact discipline, evented progress, and a documented publish process.
+The generated updater key currently has no password. Rotate it before broad distribution if release policy requires a password-protected private key.
 
 ## Setup
 
@@ -231,9 +219,6 @@ The React bridge calls these commands:
 - `open_external`
 - `open_path`
 - `pick_picture_path`
-- `check_for_update`
-- `download_update`
-- `install_update`
 
 `query_inventory` currently range-scans FeOxDB entries in memory, then applies scope, search, filters, sort, offset, and limit. That fits the current dataset. Add secondary indexes, cached normalized search text, or server-side pagination if the inventory grows enough to make scans or table rendering slow.
 
@@ -255,6 +240,29 @@ Pop-Location
 bun tauri build --bundles nsis
 ```
 
+For signed updater releases, build with the updater private key available outside the repo:
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY_PATH = "$env:USERPROFILE\.tauri\me-inventory-updater.key"
+bun tauri build --bundles nsis
+```
+
+Publish the generated NSIS installer, its `.sig` file, and a GitHub Release asset named `latest.json`. Static updater metadata must include the Tauri updater fields for the Windows platform:
+
+```json
+{
+  "version": "0.9.8",
+  "notes": "Release notes",
+  "pub_date": "2026-04-29T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "contents of the generated .sig file",
+      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v0.9.8/ME_Inventory_0.9.8_x64-setup.exe"
+    }
+  }
+}
+```
+
 Manual smoke for a release candidate:
 
 - Confirm `package.json`, `src-tauri\Cargo.toml`, and `src-tauri\tauri.conf.json` versions match.
@@ -271,14 +279,16 @@ Manual smoke for a release candidate:
 - Confirm a missing picture path shows the missing state without crashing.
 - Export Excel, cancel once, then save once to a path with spaces.
 - Open the workbook and confirm exactly `Inventory` and `Archive` sheets.
-- Confirm the updater stays quiet when no newer valid manifest exists.
+- Confirm the updater stays quiet when no newer signed GitHub Release metadata exists.
+- If a newer signed release exists, confirm check, download progress, install, and relaunch/update behavior.
 - If a shared test root is available, confirm local pending operations push and another client can pull them.
-- Record installer path, SHA-256, commit, source version, tester, and date.
+- Record installer path, updater `.sig` path, commit, source version, tester, and date.
 
 Known release caveats:
 
 - The installer and executable are not signed by repo configuration.
 - Windows SmartScreen and enterprise policy behavior still need environment-specific verification.
+- Tauri updater artifact signing is configured, but Windows code signing is still separate.
 - Changing the Tauri identifier after users install the app can strand app data in a different directory.
 
 ## Optional Memory And Lifecycle Audit
@@ -308,13 +318,12 @@ Manual exercise:
 ## Open Work
 
 - Bump or reconcile the source version when preparing the next release after `0.9.7`.
-- Add signed release artifacts or document the custom shared-drive updater as the official release path.
-- Add updater state events for the UI.
+- Validate the signed GitHub Releases updater path with a real release asset.
 - Finish shared sync snapshots, manifest validation, single-writer compaction, conflict UI, locked-file smoke, and shared media storage.
 - Decide whether entries should move from the current compatibility projection to future `inventory:item:*` and ledger keyspaces.
 - Add import issue tracking and clearer unknown-schema errors for legacy SQLite import.
 - Benchmark real inventory size for search, sort, startup, sync, and table rendering.
 - Add FeOxDB schema versioning and a future migration path.
 - Confirm UNC picture path behavior in a packaged smoke.
-- Implement HTML export only if it is still needed.
-- Decide whether the Tauri identifier should ever match the old Electron app id. Do not change it without a migration plan.
+- Keep HTML export as an explicit placeholder unless it becomes a real requirement.
+- Keep `com.me.inventory`; do not change the Tauri identifier without a migration plan.

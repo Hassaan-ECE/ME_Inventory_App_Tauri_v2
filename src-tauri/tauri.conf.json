@@ -31,6 +31,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis"],
     "publisher": "Syed Hassaan Shah",
     "copyright": "Copyright (c) 2026 Syed Hassaan Shah",
@@ -43,5 +44,16 @@
       }
     },
     "icon": ["icons/icon.ico"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIzMDVERjg3NzMyQzdCOTcKUldTWGV5eHpoOThGSTBmelRDMG9iZzgrTW5nWXNZT01tUU1iYUxJd3FWOThyOGQ4cnA0ZmRNWEcK",
+      "endpoints": [
+        "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

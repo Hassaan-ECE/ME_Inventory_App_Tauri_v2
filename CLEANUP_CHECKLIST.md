@@ -23,22 +23,18 @@ Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records comman
 ### Current Worktree Baseline
 
 ```text
- D PORTING_TODO.md
- M README.md
- D docs/MEMORY_LEAK_AUDIT.md
- D docs/desktop-smoke-checklist.md
- D docs/installer-smoke-2026-04-26-worker-a.md
- D docs/manual-smoke-2026-04-26-syed.md
- D docs/post-picture-fix-smoke-2026-04-26.md
- D docs/release-qa-2026-04-26-manager.md
- D docs/sync-architecture-next-slice.md
- D guidelines.md
- M src/components/inventory/EntryDialog.tsx
- M src/components/inventory/InventoryShell.tsx
-?? AGENT_RUNBOOK.md
-?? CLEANUP_CHECKLIST.md
-?? src/components/inventory/entry-dialog/
-?? src/components/inventory/shell/
+Branch: codex/cleanup-checklist-completion
+Committed cleanup slices:
+- performance checklist phase
+- inventory table component split
+- inventory helper module split and broader search parity
+- native helper split
+- Excel export workbook split
+- legacy import helper split
+- unused layout component removal
+Pending worktree at this checkpoint:
+- signed Tauri updater migration, package locks, release docs, updater bridge tests
+- checklist/runbook updates for the current wave
 ```
 
 ## Current Constraints
@@ -122,21 +118,21 @@ Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records comman
 
 ## Phase 6: Dead Code And Deferred Features
 
-- [ ] Inventory placeholders, scaffolds, disabled paths, and deferred features.
-- [ ] Review HTML export placeholder and decide whether it stays or is removed until needed.
-- [ ] Review updater no-op/event scaffolding.
+- [~] Inventory placeholders, scaffolds, disabled paths, and deferred features.
+- [x] Keep HTML export visible as an explicit placeholder with test coverage.
+- [x] Replace updater no-op/event scaffolding with signed Tauri updater progress events.
 - [ ] Review mock/browser fallback paths and keep only intentional dev/demo behavior.
-- [ ] Review stale release/version references after the README consolidation.
-- [ ] Remove dead code only when tests prove behavior stayed stable.
+- [x] Review stale release/version references touched by the updater migration.
+- [x] Remove dead code only when tests prove behavior stayed stable.
 
 ## Phase 7: Remaining Frontend Restructure
 
-- [ ] Review `InventoryTable.tsx` for smaller helpers or components.
+- [x] Review `InventoryTable.tsx` for smaller helpers or components.
 - [ ] Review `InventoryHeader.tsx` for menu/action extraction.
-- [ ] Review `src/lib/inventory.ts` for testable helper boundaries.
+- [x] Review `src/lib/inventory.ts` for testable helper boundaries.
 - [ ] Split oversized frontend tests if they slow future edits, especially `inventory-shell.test.tsx`.
 - [ ] Preserve visible UI behavior, public props, localStorage keys, and Tauri bridge calls.
-- [ ] Run targeted frontend tests after each slice.
+- [x] Run targeted frontend tests after each completed slice.
 
 ## Phase 8: Performance Optimization
 
@@ -164,14 +160,14 @@ Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records comman
 
 ## Phase 10: Native, Export, Import, And Updater Cleanup
 
-- [ ] Review `export.rs` for workbook-format/helper extraction.
-- [ ] Review `legacy_import.rs` for schema detection and mapping boundaries.
-- [ ] Review `native.rs` for URL/path/picture preview helper boundaries.
-- [ ] Review `updater.rs` for manifest, cache, hash, and install boundaries.
-- [ ] Preserve Excel workbook sheet contract.
-- [ ] Preserve URL/path safety behavior.
-- [ ] Preserve legacy SQLite import behavior.
-- [ ] Keep custom shared-drive updater cleanup separate from signed Tauri updater decisions.
+- [x] Review `export.rs` for workbook-format/helper extraction.
+- [x] Review `legacy_import.rs` for schema detection and mapping boundaries.
+- [x] Review `native.rs` for URL/path/picture preview helper boundaries.
+- [x] Replace custom shared-drive `updater.rs` with official signed Tauri updater integration.
+- [x] Preserve Excel workbook sheet contract.
+- [x] Preserve URL/path safety behavior.
+- [x] Preserve legacy SQLite import behavior.
+- [x] Document that the custom shared-drive updater path was replaced by signed GitHub Releases metadata.
 
 ## Phase 11: Tests And Smoke
 
@@ -184,10 +180,10 @@ Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records comman
 ## Phase 12: Architecture And Release Decisions
 
 - [x] Reconcile source version for the `0.9.7` release checkpoint.
-- [ ] Decide whether to keep the custom shared-drive updater or move to signed Tauri updater.
-- [ ] Decide when to add sync snapshots, manifest compaction, conflict UI, and shared media storage.
-- [ ] Decide whether and when to move from compatibility `InventoryEntry` records to future ledger/item keyspaces.
-- [ ] Decide whether the Tauri identifier should ever change.
+- [x] Move from the custom shared-drive updater to the official signed Tauri updater.
+- [x] Defer sync snapshots, manifest compaction, conflict UI, and shared media storage to separate specs.
+- [x] Defer any move from compatibility `InventoryEntry` records to future ledger/item keyspaces to a separate spec.
+- [x] Keep `com.me.inventory`; no identifier migration in this cleanup branch.
 
 ## Worker Policy
 
@@ -202,8 +198,14 @@ Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records comman
 - [x] Worker A / Ohm: Inventory shell cleanup, GPT-5.5 xhigh, completed. Reported targeted shell tests pass, 1 file / 23 tests, and lint pass.
 - [x] Worker B / Carver: Entry dialog cleanup, GPT-5.5 xhigh, completed. Reported targeted dialog tests pass, 1 file / 6 tests, lint pass, and scoped diff check pass.
 - [x] Worker C / Locke: Read-only integration review, GPT-5.5 xhigh, completed. No code findings; noted that new extracted folders must be included when committing.
-- [~] Worker D / Nash: Phase 4 checkpoint audit, GPT-5.5 xhigh, running.
-- [~] Worker E / Archimedes: Phase 5 tooling investigation, GPT-5.5 xhigh, running.
+- [x] Worker D / Nash: Phase 4 checkpoint audit, GPT-5.5 xhigh, completed.
+- [x] Worker E / Archimedes: Phase 5 tooling investigation, GPT-5.5 xhigh, completed.
+- [x] Worker Schrodinger: Phase 7 table restructure, completed and committed.
+- [x] Worker Gibbs: Phase 7 inventory helper split and broader global search parity prep, completed and committed.
+- [x] Worker Bernoulli: Phase 6 unused layout cleanup, completed and committed.
+- [x] Worker Euler: Phase 10 Excel export cleanup, completed and committed.
+- [x] Worker Poincare: Phase 10 legacy import cleanup, completed and committed.
+- [x] Worker Lovelace: Phase 10 native helper cleanup, completed and committed.
 
 ## Validation Results
 
@@ -224,22 +226,30 @@ Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records comman
 - Phase 4 checkpoint `git diff --check`: pass, with CRLF normalization warnings only for unstaged Rust updater files.
 - Phase 5 `cargo fmt -- --check`: pass, 0.73s.
 - Phase 5 `cargo check`: pass, 13.54s.
-- Phase 5 `cargo test`: pass, 182.76s, with four `dead_code` warnings in the `updater_scaffold` test target.
+- Phase 5 `cargo test`: pass, 182.76s, with four `dead_code` warnings in the now-removed custom updater scaffold test target.
 - Release `0.9.7` `& "$env:USERPROFILE\.bun\bin\bun.exe" run lint`: pass.
 - Release `0.9.7` `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-shell.test.tsx src/test/entry-dialog.test.tsx`: pass, 2 files / 29 tests.
 - Release `0.9.7` `& "$env:USERPROFILE\.bun\bin\bun.exe" run test`: pass, 6 files / 55 tests.
 - Release `0.9.7` `& "$env:USERPROFILE\.bun\bin\bun.exe" run build`: pass, with Vite plugin timing warning only.
 - Release `0.9.7` `cargo fmt -- --check`: pass, 1.45s.
 - Release `0.9.7` `cargo check`: pass, 33.67s.
-- Release `0.9.7` `cargo test`: pass, 247.44s, with four `dead_code` warnings in the `updater_scaffold` test target.
+- Release `0.9.7` `cargo test`: pass, 247.44s, with four `dead_code` warnings in the now-removed custom updater scaffold test target.
 - Release `0.9.7` `bun tauri build --bundles nsis`: first attempt hit Windows os error 1224 during NSIS bundling; retry after deleting only the generated `0.9.7` installer passed in 103.88s.
-- Release `0.9.7` shared updater manifest: published `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\current.json` pointing to `releases/0.9.7/ME Inventory Setup 0.9.7.exe` with SHA-256 `31ccbe6a1a86e12bdb35834bd6e3d900afd4a6e945d0ec2f816220257e22583a`.
+- Release `0.9.7` legacy shared updater manifest: published `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\current.json` pointing to `releases/0.9.7/ME Inventory Setup 0.9.7.exe` with SHA-256 `31ccbe6a1a86e12bdb35834bd6e3d900afd4a6e945d0ec2f816220257e22583a`; superseded for future releases by signed Tauri updater metadata on GitHub Releases.
 - Release `0.9.7` `git diff --cached --check`: pass.
 - Release `0.9.7` `git diff --check`: pass, with CRLF normalization warnings only.
+- Phase 7 table split `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-table.test.tsx src/test/inventory-filtering.test.ts`: pass, 2 files / 15 tests.
+- Phase 7 helper split `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-table.test.tsx src/test/inventory-filtering.test.ts`: pass, 2 files / 15 tests.
+- Phase 10 native split `cargo test native::tests`: pass, 8 tests.
+- Phase 10 export split `cargo test export::tests`: pass, 2 tests.
+- Phase 10 legacy import split `cargo test legacy_import::tests`: pass, 6 tests.
+- Signed updater migration `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-shell.test.tsx`: pass, 1 file / 24 tests.
+- Signed updater migration `cargo check`: pass.
+- Signed updater migration `git diff --check`: pass, with CRLF normalization warnings only.
 
 ## Next Recommended Slice
 
-- Keep the staged checkpoint intact until it is committed or intentionally split.
-- Decide whether to fix the stale Bun shim globally or continue using the direct binary fallback.
-- Start Phase 6 or Phase 7 for another low-risk frontend cleanup slice, start Phase 8 performance baselining before optimization, or start Rust cleanup now that the Rust baseline is available.
+- Run full frontend and Rust validation after the signed updater migration commit.
+- Start Phase 8 performance baselining before any query/index optimization.
+- Split `store.rs` and `sync.rs` only after performance baseline and query parity decisions are recorded.
 - Use `AGENT_RUNBOOK.md` to avoid repeating known command/tooling traps.

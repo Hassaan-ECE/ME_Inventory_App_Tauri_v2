@@ -1,6 +1,6 @@
 # Agent Runbook
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
 Use this file before starting cleanup work in this repo. It records project-specific traps, pivots that worked, and fixes still worth doing.
 
@@ -70,6 +70,15 @@ rustup component add rustfmt
 - Current known case: the first `0.9.7` bundle attempt failed this way; deleting `ME Inventory_0.9.7_x64-setup.exe` and retrying produced a passing bundle.
 - Treat the installer from a failed bundle command as untrusted even if an `.exe` file exists.
 
+### Signed Tauri Updater Key
+
+- Current updater migration uses the official Tauri updater plugin with GitHub Releases static metadata.
+- Public updater config lives in `src-tauri\tauri.conf.json`.
+- Private updater signing key was generated outside the repo at `%USERPROFILE%\.tauri\me-inventory-updater.key`.
+- Public key sidecar was generated at `%USERPROFILE%\.tauri\me-inventory-updater.key.pub`.
+- Do not commit private key material, passwords, generated `.sig` files, release bundles, or `latest.json` drafts unless the user explicitly asks for release asset staging.
+- The current key was generated without a password after the CLI rejected the empty-password flag form. Rotate the key before broad distribution if policy requires password-protected signing keys.
+
 ### Untracked Extracted Folders
 
 - Symptom: imports pass locally, but new extracted module folders show as `??` in `git status --short`.
@@ -111,7 +120,7 @@ git status --short
 `rustfmt` is installed. Current baseline from 2026-04-28:
 - `cargo fmt -- --check`: pass, about 0.73s.
 - `cargo check`: pass, about 13.54s.
-- `cargo test`: pass, about 182.76s, with four `dead_code` warnings in the `updater_scaffold` test target.
+- `cargo test`: pass, about 182.76s; the old `updater_scaffold` warning was removed when the custom updater scaffold was replaced by the signed Tauri updater.
 
 Run:
 
@@ -208,8 +217,19 @@ Attempted command/action: cargo fmt -- --check; cargo check; cargo test
 Error or symptom: No failure. cargo test emitted four dead_code warnings in the updater_scaffold test target.
 Root cause: The updater scaffold test imports updater functions that are not all used by that test binary.
 Pivot used: None needed; validation passed.
-Proper fix: Optional future cleanup if warnings become noisy.
-Status: resolved
+Proper fix: Removed the custom updater scaffold during the signed Tauri updater migration.
+Status: resolved on 2026-04-29
+```
+
+```text
+Date: 2026-04-29
+Agent/worker: Manager
+Attempted command/action: bun tauri signer generate --ci --password "" --write-keys "$env:USERPROFILE\.tauri\me-inventory-updater.key"
+Error or symptom: The Tauri CLI rejected the empty password flag form as a missing value.
+Root cause: Empty string argument was not accepted for `--password` in this PowerShell invocation.
+Pivot used: Generated keys with `bun tauri signer generate --ci --write-keys "$env:USERPROFILE\.tauri\me-inventory-updater.key"`.
+Proper fix: For protected release keys, rerun key generation interactively or pass a real secret from a secure local store.
+Status: resolved; current key is unpassworded and stored outside the repo.
 ```
 
 ```text

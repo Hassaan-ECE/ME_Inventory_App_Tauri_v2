@@ -7,7 +7,6 @@ mod query;
 mod shared_watcher;
 mod store;
 mod sync;
-mod updater;
 
 use tauri::{Manager, RunEvent};
 
@@ -16,6 +15,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let legacy_sqlite_path = legacy_import::resolve_legacy_sqlite_path(app.handle());
             let db = store::InventoryDb::open(app.handle(), legacy_sqlite_path)?;
@@ -37,10 +37,7 @@ pub fn run() {
             native::load_picture_preview,
             native::open_external,
             native::open_path,
-            native::pick_picture_path,
-            updater::check_for_update,
-            updater::download_update,
-            updater::install_update
+            native::pick_picture_path
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

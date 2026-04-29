@@ -155,6 +155,83 @@ describe("InventoryShell shell", () => {
     }
   });
 
+  it("backs desktop update checks with Tauri updater progress events", async () => {
+    const receivedStates: UpdateState[] = [];
+    const update = {
+      body: "Signed updater release",
+      close: vi.fn().mockResolvedValue(undefined),
+      currentVersion: APP_VERSION,
+      date: "2026-04-29T00:00:00Z",
+      download: vi.fn(async (onEvent?: (event: unknown) => void) => {
+        onEvent?.({ event: "Started", data: { contentLength: 100 } });
+        onEvent?.({ event: "Progress", data: { chunkLength: 25 } });
+        onEvent?.({ event: "Finished" });
+      }),
+      install: vi.fn().mockResolvedValue(undefined),
+      version: "0.9.8",
+    };
+    const check = vi.fn().mockResolvedValue(update);
+
+    delete window.inventoryDesktop;
+    vi.resetModules();
+    vi.doMock("@tauri-apps/api/core", () => ({
+      convertFileSrc: (path: string) => `asset://${path}`,
+      invoke: vi.fn(),
+      isTauri: () => true,
+    }));
+    vi.doMock("@tauri-apps/api/event", () => ({
+      listen: vi.fn(() => Promise.resolve(() => undefined)),
+    }));
+    vi.doMock("@tauri-apps/plugin-updater", () => ({ check }));
+
+    try {
+      await import("@/lib/tauriInventoryBridge");
+      const desktopBridge = Reflect.get(window, "inventoryDesktop") as NonNullable<Window["inventoryDesktop"]> | undefined;
+      const cleanup = desktopBridge?.onUpdateStateChanged?.((state) => {
+        receivedStates.push(state);
+      });
+
+      const availableState = await desktopBridge?.checkForUpdate?.();
+      expect(check).toHaveBeenCalledTimes(1);
+      expect(availableState).toMatchObject({
+        available: true,
+        currentVersion: APP_VERSION,
+        latestVersion: "0.9.8",
+        notes: "Signed updater release",
+        publishedAt: "2026-04-29T00:00:00Z",
+        status: "available",
+      });
+
+      const readyState = await desktopBridge?.downloadUpdate?.();
+      expect(update.download).toHaveBeenCalledTimes(1);
+      expect(readyState).toMatchObject({
+        available: true,
+        downloadPhase: "ready",
+        downloadProgress: 100,
+        latestVersion: "0.9.8",
+        status: "ready",
+      });
+      expect(receivedStates).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ status: "checking" }),
+          expect.objectContaining({ status: "available" }),
+          expect.objectContaining({ downloadPhase: "copying", downloadProgress: 25 }),
+          expect.objectContaining({ downloadPhase: "verifying", downloadProgress: 100 }),
+          expect.objectContaining({ downloadPhase: "ready", downloadProgress: 100 }),
+        ]),
+      );
+
+      await desktopBridge?.installUpdate?.();
+      expect(update.install).toHaveBeenCalledTimes(1);
+      cleanup?.();
+    } finally {
+      vi.doUnmock("@tauri-apps/api/core");
+      vi.doUnmock("@tauri-apps/api/event");
+      vi.doUnmock("@tauri-apps/plugin-updater");
+      vi.resetModules();
+    }
+  });
+
   it("renders the inventory view by default with seeded counts", () => {
     render(<InventoryShell />);
 
