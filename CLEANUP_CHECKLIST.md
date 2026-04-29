@@ -240,6 +240,15 @@ Pending worktree at this checkpoint:
 - Release `0.9.7` legacy shared updater manifest: published `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\current.json` pointing to `releases/0.9.7/ME Inventory Setup 0.9.7.exe` with SHA-256 `31ccbe6a1a86e12bdb35834bd6e3d900afd4a6e945d0ec2f816220257e22583a`; superseded for future releases by signed Tauri updater metadata on GitHub Releases.
 - Release `0.9.7` `git diff --cached --check`: pass.
 - Release `0.9.7` `git diff --check`: pass, with CRLF normalization warnings only.
+- Release `0.9.8` `& "$env:USERPROFILE\.bun\bin\bun.exe" run lint`: pass.
+- Release `0.9.8` `& "$env:USERPROFILE\.bun\bin\bun.exe" run test`: pass, 7 files / 60 tests, with 1 skipped file / 1 skipped test.
+- Release `0.9.8` `& "$env:USERPROFILE\.bun\bin\bun.exe" run build`: pass.
+- Release `0.9.8` `cargo fmt -- --check`: pass.
+- Release `0.9.8` `cargo check`: pass.
+- Release `0.9.8` `cargo test`: pass, 36 unit tests plus integration suites, with the benchmark harness ignored as expected.
+- Release `0.9.8` `bun tauri build --bundles nsis`: pass after setting `TAURI_SIGNING_PRIVATE_KEY` to the key contents and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to an explicit empty string; produced `ME Inventory_0.9.8_x64-setup.exe` and `.sig`.
+- Release `0.9.8` local staging: created ignored `release\v0.9.8\` with GitHub `latest.json`, installer, signature, SHA-256 sums, and transitional legacy shared-updater manifest.
+- Release `0.9.8` legacy shared updater manifest: backed up the previous shared `current.json`, then published `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\current.json` pointing to `releases/0.9.8/ME Inventory Setup 0.9.8.exe` with SHA-256 `2001b2426fea8f2eb6d3c84f794491e7ff1deff62a1f5c12a23ba95413fcbcd3`.
 - Phase 7 table split `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-table.test.tsx src/test/inventory-filtering.test.ts`: pass, 2 files / 15 tests.
 - Phase 7 helper split `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-table.test.tsx src/test/inventory-filtering.test.ts`: pass, 2 files / 15 tests.
 - Phase 10 native split `cargo test native::tests`: pass, 8 tests.
