@@ -134,39 +134,51 @@ fn compare_query_entries(
     sort: &SortState,
 ) -> Ordering {
     let order = match sort.column.as_str() {
-        "qty" => compare_qty(left.qty, right.qty),
-        "verified" => left.verified_in_survey.cmp(&right.verified_in_survey),
-        "assetNumber" => compare_text_empty_last(&left.asset_number, &right.asset_number),
-        "model" => compare_text_empty_last(&left.model, &right.model),
-        "description" => compare_text_empty_last(&left.description, &right.description),
-        "projectName" => compare_text_empty_last(&left.project_name, &right.project_name),
-        "location" => compare_text_empty_last(&left.location, &right.location),
-        "links" => compare_text_empty_last(&left.links, &right.links),
-        _ => compare_text_empty_last(&left.manufacturer, &right.manufacturer),
+        "qty" => compare_qty(left.qty, right.qty, &sort.direction),
+        "verified" => apply_sort_direction(
+            left.verified_in_survey.cmp(&right.verified_in_survey),
+            &sort.direction,
+        ),
+        "assetNumber" => {
+            compare_text_empty_last(&left.asset_number, &right.asset_number, &sort.direction)
+        }
+        "model" => compare_text_empty_last(&left.model, &right.model, &sort.direction),
+        "description" => {
+            compare_text_empty_last(&left.description, &right.description, &sort.direction)
+        }
+        "projectName" => {
+            compare_text_empty_last(&left.project_name, &right.project_name, &sort.direction)
+        }
+        "location" => compare_text_empty_last(&left.location, &right.location, &sort.direction),
+        "links" => compare_text_empty_last(&left.links, &right.links, &sort.direction),
+        _ => compare_text_empty_last(&left.manufacturer, &right.manufacturer, &sort.direction),
     };
 
-    apply_sort_direction(order, &sort.direction)
+    order
         .then_with(|| right.updated_at.cmp(&left.updated_at))
         .then_with(|| numeric_id(&right.id).cmp(&numeric_id(&left.id)))
 }
 
-fn compare_qty(left: Option<f64>, right: Option<f64>) -> Ordering {
+fn compare_qty(left: Option<f64>, right: Option<f64>, direction: &str) -> Ordering {
     match (left, right) {
         (None, None) => Ordering::Equal,
         (None, Some(_)) => Ordering::Greater,
         (Some(_), None) => Ordering::Less,
-        (Some(left), Some(right)) => left.partial_cmp(&right).unwrap_or(Ordering::Equal),
+        (Some(left), Some(right)) => apply_sort_direction(
+            left.partial_cmp(&right).unwrap_or(Ordering::Equal),
+            direction,
+        ),
     }
 }
 
-fn compare_text_empty_last(left: &str, right: &str) -> Ordering {
+fn compare_text_empty_last(left: &str, right: &str, direction: &str) -> Ordering {
     let left = left.trim().to_lowercase();
     let right = right.trim().to_lowercase();
     match (left.is_empty(), right.is_empty()) {
         (true, true) => Ordering::Equal,
         (true, false) => Ordering::Greater,
         (false, true) => Ordering::Less,
-        (false, false) => left.cmp(&right),
+        (false, false) => apply_sort_direction(left.cmp(&right), direction),
     }
 }
 
@@ -247,6 +259,70 @@ mod tests {
         assert_eq!(total_filtered, 3);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].id, "2");
+    }
+
+    #[test]
+    fn query_global_search_includes_assigned_user_and_condition() {
+        let mut assigned = test_entry("1", "uuid-1", "A", "One", false, 1.0, false);
+        assigned.assigned_to = "Avery Morgan".to_string();
+        let mut condition = test_entry("2", "uuid-2", "B", "Two", false, 1.0, false);
+        condition.condition = "Calibration due".to_string();
+        let entries = vec![assigned, condition];
+
+        let (assigned_results, _) = query_entries(
+            &entries,
+            InventoryQueryInput {
+                query: "avery".to_string(),
+                ..InventoryQueryInput::default()
+            },
+        );
+        let (condition_results, _) = query_entries(
+            &entries,
+            InventoryQueryInput {
+                query: "calibration due".to_string(),
+                ..InventoryQueryInput::default()
+            },
+        );
+
+        assert_eq!(assigned_results[0].id, "1");
+        assert_eq!(condition_results[0].id, "2");
+    }
+
+    #[test]
+    fn query_sorts_blank_values_last_in_both_directions() {
+        let mut blank_asset = test_entry("1", "uuid-1", "A", "Blank", false, 1.0, false);
+        blank_asset.asset_number.clear();
+        let filled_asset = test_entry("2", "uuid-2", "B", "Filled", false, 2.0, false);
+        let mut blank_qty = test_entry("3", "uuid-3", "C", "Blank qty", false, 1.0, false);
+        blank_qty.qty = None;
+        let filled_qty = test_entry("4", "uuid-4", "D", "Filled qty", false, 4.0, false);
+        let entries = vec![blank_asset, filled_asset, blank_qty, filled_qty];
+
+        for direction in ["asc", "desc"] {
+            let (asset_results, _) = query_entries(
+                &entries,
+                InventoryQueryInput {
+                    sort: SortState {
+                        column: "assetNumber".to_string(),
+                        direction: direction.to_string(),
+                    },
+                    ..InventoryQueryInput::default()
+                },
+            );
+            let (qty_results, _) = query_entries(
+                &entries,
+                InventoryQueryInput {
+                    sort: SortState {
+                        column: "qty".to_string(),
+                        direction: direction.to_string(),
+                    },
+                    ..InventoryQueryInput::default()
+                },
+            );
+
+            assert_eq!(asset_results.last().unwrap().id, "1");
+            assert_eq!(qty_results.last().unwrap().id, "3");
+        }
     }
 
     pub(crate) fn test_entry(

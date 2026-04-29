@@ -1,0 +1,45 @@
+# Performance Baseline
+
+Captured: 2026-04-29 on `codex/cleanup-checklist-completion`
+
+## Commands
+
+```powershell
+Push-Location src-tauri
+cargo test --test performance_baseline -- --ignored --nocapture
+Pop-Location
+
+$env:RUN_PERF_BASELINE = "1"
+$env:PERF_BASELINE_JSON = ".tmp\performance-baseline-frontend.json"
+& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- scripts/performance-baseline.test.tsx
+```
+
+Generated JSON output stays under `.tmp/` and is not committed.
+
+## Backend
+
+The backend baseline measures FeOxDB `load_entries`, a `query_inventory` equivalent that loads entries then counts, filters, sorts, and pages, and in-memory query filtering/sorting after entries are already loaded.
+
+| Dataset | Entries | `load_entries` median / p95 | Query equivalent median / p95 | In-memory query median / p95 |
+| --- | ---: | ---: | ---: | ---: |
+| Current SQLite import | 146 | 2.378 ms / 2.465 ms | 1.889 ms / 2.307 ms | 0.028 ms / 0.033 ms |
+| Synthetic 1k | 1,000 | 13.196 ms / 16.490 ms | 17.017 ms / 18.295 ms | 3.637 ms / 4.193 ms |
+| Synthetic 10k | 10,000 | 141.043 ms / 144.067 ms | 216.612 ms / 250.413 ms | 55.854 ms / 63.877 ms |
+
+Synthetic seed time was 51.710 ms for 1k entries and 341.442 ms for 10k entries.
+
+## Frontend
+
+The frontend baseline measures local search/filter/sort, virtualized table initial render, scroll update handling, and process heap after each dataset.
+
+| Dataset | Entries | Local filter/sort median / p95 | Table render median / p95 | Scroll update median / p95 | Heap after dataset |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Current mock data | 14 | 0.009 ms / 0.031 ms | 9.815 ms / 33.745 ms | 0.029 ms / 0.121 ms | 107.697 MB |
+| Synthetic 1k | 1,000 | 0.632 ms / 1.122 ms | 15.123 ms / 22.100 ms | 5.118 ms / 6.674 ms | 99.692 MB |
+| Synthetic 10k | 10,000 | 3.953 ms / 6.564 ms | 7.172 ms / 10.752 ms | 4.946 ms / 5.964 ms | 111.599 MB |
+
+## Decision
+
+The 10k local-load baseline is below the 500 ms threshold, and 10k search/filter/sort is below the 100 ms threshold in both frontend local filtering and backend in-memory query filtering. Server-backed paged table queries, cached normalized search text, and app-managed FeOxDB secondary query indexes are deferred in this cleanup branch.
+
+Keep `queryInventory` available and keep the benchmark harnesses so the indexed path can be added later if real inventory data or slower machines cross the thresholds.

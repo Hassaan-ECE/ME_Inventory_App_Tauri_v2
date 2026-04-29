@@ -108,6 +108,15 @@ impl InventoryDb {
         Self::open_with_size(db_path, legacy_sqlite_path, TEST_DB_SIZE)
     }
 
+    #[cfg(test)]
+    pub(crate) fn open_at_with_size(
+        db_path: PathBuf,
+        legacy_sqlite_path: Option<PathBuf>,
+        file_size: u64,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::open_with_size(db_path, legacy_sqlite_path, file_size)
+    }
+
     fn open_with_size(
         db_path: PathBuf,
         legacy_sqlite_path: Option<PathBuf>,
