@@ -144,6 +144,20 @@ describe("InventoryShell shell", () => {
     expect(screen.getByText("Total: 2 | Verified: 1/2")).toBeInTheDocument();
   });
 
+  it("does not show bundled mock data when desktop database loading fails", async () => {
+    window.inventoryDesktop = createDesktopBridge({
+      loadInventory: vi.fn().mockRejectedValue(new Error("database unavailable")),
+      syncInventory: vi.fn(),
+    });
+
+    render(<InventoryShell />);
+
+    expect(screen.getByText("Loading inventory entries...")).toBeInTheDocument();
+    expect(await screen.findByText("Showing all 0 entries")).toBeInTheDocument();
+    expect(screen.queryByText("Stainless socket-head cap screws")).not.toBeInTheDocument();
+    expect(screen.getByText("Could not load the ME Inventory database.")).toBeInTheDocument();
+  });
+
   it("filters desktop search locally without querying the backend per keystroke", async () => {
     const user = userEvent.setup();
     const desktopEntries = [

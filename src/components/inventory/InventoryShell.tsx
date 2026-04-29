@@ -143,10 +143,10 @@ export function InventoryShell() {
         return shared === payload.shared ? payload : { ...payload, shared };
       } catch {
         if (canApplyDesktopResult(applyResult, requestId)) {
-          setEntries(MOCK_INVENTORY);
-          setDataSource("mock");
-          setSharedStatus(MOCK_SHARED_STATUS);
-          announceStatus("Database unavailable. Falling back to bundled mock data.");
+          setEntries([]);
+          setDataSource("desktop");
+          markSharedUnavailable("Inventory database unavailable. Restart the app or check app data permissions.");
+          announceStatus("Could not load the ME Inventory database.");
         }
         return null;
       } finally {
@@ -155,7 +155,7 @@ export function InventoryShell() {
         }
       }
     },
-    [canApplyDesktopResult],
+    [canApplyDesktopResult, markSharedUnavailable],
   );
 
   const syncEntriesFromDesktop = useCallback(

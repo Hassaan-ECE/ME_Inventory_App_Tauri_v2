@@ -33,7 +33,7 @@ Committed cleanup slices:
 - legacy import helper split
 - unused layout component removal
 Pending worktree at this checkpoint:
-- Phase 7 shell test split
+- Phase 6 desktop fallback safety fix
 - Phase 9 Rust store/sync split workers in progress
 ```
 
@@ -121,7 +121,7 @@ Pending worktree at this checkpoint:
 - [~] Inventory placeholders, scaffolds, disabled paths, and deferred features.
 - [x] Keep HTML export visible as an explicit placeholder with test coverage.
 - [x] Replace updater no-op/event scaffolding with signed Tauri updater progress events.
-- [ ] Review mock/browser fallback paths and keep only intentional dev/demo behavior.
+- [x] Review mock/browser fallback paths and keep only intentional dev/demo behavior.
 - [x] Review stale release/version references touched by the updater migration.
 - [x] Remove dead code only when tests prove behavior stayed stable.
 
@@ -252,6 +252,8 @@ Pending worktree at this checkpoint:
 - Phase 7 header split `& "$env:USERPROFILE\.bun\bin\bun.exe" run lint`: pass.
 - Phase 7 shell test split `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-shell.test.tsx src/test/tauri-inventory-bridge.test.ts`: pass, 2 files / 24 tests.
 - Phase 7 shell test split `& "$env:USERPROFILE\.bun\bin\bun.exe" run lint`: pass.
+- Phase 6 desktop fallback fix `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-shell.test.tsx`: pass, 1 file / 21 tests.
+- Phase 6 desktop fallback fix `& "$env:USERPROFILE\.bun\bin\bun.exe" run lint`: pass.
 
 ## Next Recommended Slice
 
