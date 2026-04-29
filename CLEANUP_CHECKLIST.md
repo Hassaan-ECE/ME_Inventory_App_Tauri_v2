@@ -33,7 +33,7 @@ Committed cleanup slices:
 - legacy import helper split
 - unused layout component removal
 Pending worktree at this checkpoint:
-- Phase 9 Rust store/sync split integration
+- Phase 11 sync test split
 ```
 
 ## Current Constraints
@@ -170,8 +170,8 @@ Pending worktree at this checkpoint:
 
 ## Phase 11: Tests And Smoke
 
-- [ ] Split oversized sync tests after Rust module boundaries settle.
-- [ ] Keep one-machine sync smoke documented and runnable.
+- [x] Split oversized sync tests after Rust module boundaries settle.
+- [x] Keep one-machine sync smoke documented and runnable.
 - [ ] Add or retain packaged smoke checklist before release.
 - [ ] Track validation commands and results after every cleanup slice.
 - [ ] Record any skipped validation with the reason.
@@ -259,6 +259,8 @@ Pending worktree at this checkpoint:
 - Phase 9 store/sync split `cargo test store::tests`: pass, 5 tests.
 - Phase 9 store/sync split `cargo test --test sync_core`: pass, 15 tests.
 - Phase 9 store/sync split `cargo test --test shared_sync_flow`: pass, 21 tests.
+- Phase 11 sync test split `cargo test --test shared_sync_flow`: pass, 13 tests.
+- Phase 11 sync test split `cargo test --test sync_conflict_flow`: pass, 15 tests.
 
 ## Next Recommended Slice
 
