@@ -1,6 +1,6 @@
 # Cleanup Checklist
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
 Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records command pivots, known blockers, worker rules, and troubleshooting notes. Update it whenever an agent hits a new trap or finds a better route.
 
@@ -138,7 +138,22 @@ Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records comman
 - [ ] Preserve visible UI behavior, public props, localStorage keys, and Tauri bridge calls.
 - [ ] Run targeted frontend tests after each slice.
 
-## Phase 8: Rust Backend Restructure
+## Phase 8: Performance Optimization
+
+- [ ] Capture baseline measurements before changing behavior: `load_inventory`, `query_inventory`, search/filter/sort latency, table scrolling, and memory with realistic inventory data.
+- [ ] Decide whether the desktop UI should use server-backed `queryInventory` for large datasets before treating FeOxDB query indexes as user-visible performance work.
+- [ ] Add cached normalized search text for entries only when parity tests cover current global search behavior.
+- [ ] Add app-managed FeOxDB secondary index keys only where they match real query/filter/sort behavior.
+- [ ] Keep index maintenance covered in create, update, delete, legacy import, and shared sync apply paths.
+- [ ] Include a safe rebuild/backfill path for missing or stale indexes before replacing the current scan path.
+- [ ] Profile `InventoryTable.tsx` before and after row/cell memoization; keep virtualization and add memoized row/cell components plus stable callbacks only where render churn is measured.
+- [ ] Install or use `cargo flamegraph` for hot Rust commands; keep generated flamegraphs and profiling artifacts out of commits.
+- [ ] Fall back to timing instrumentation or Windows profiling tools if flamegraph output is unavailable or noisy.
+- [ ] Add Rust tests for indexed query parity: scope, filters, global search, sort, offset, limit, counts, create/update/delete, and index rebuild.
+- [ ] Add frontend tests for server-backed query behavior if the UI switches from local filtering.
+- [ ] Record before/after performance notes and run frontend lint/tests/build plus Rust fmt/check/test.
+
+## Phase 9: Rust Backend Restructure
 
 - [ ] Split `sync.rs` by identity, operation files, scanning, apply/merge, conflicts/tombstones, and status.
 - [ ] Split `store.rs` by entry CRUD, metadata, indexes, sync state, and test helpers.
@@ -147,7 +162,7 @@ Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records comman
 - [ ] Keep shared operation file format stable.
 - [ ] Run Rust validation after each backend slice.
 
-## Phase 9: Native, Export, Import, And Updater Cleanup
+## Phase 10: Native, Export, Import, And Updater Cleanup
 
 - [ ] Review `export.rs` for workbook-format/helper extraction.
 - [ ] Review `legacy_import.rs` for schema detection and mapping boundaries.
@@ -158,7 +173,7 @@ Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records comman
 - [ ] Preserve legacy SQLite import behavior.
 - [ ] Keep custom shared-drive updater cleanup separate from signed Tauri updater decisions.
 
-## Phase 10: Tests And Smoke
+## Phase 11: Tests And Smoke
 
 - [ ] Split oversized sync tests after Rust module boundaries settle.
 - [ ] Keep one-machine sync smoke documented and runnable.
@@ -166,7 +181,7 @@ Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records comman
 - [ ] Track validation commands and results after every cleanup slice.
 - [ ] Record any skipped validation with the reason.
 
-## Phase 11: Architecture And Release Decisions
+## Phase 12: Architecture And Release Decisions
 
 - [x] Reconcile source version for the `0.9.7` release checkpoint.
 - [ ] Decide whether to keep the custom shared-drive updater or move to signed Tauri updater.
@@ -226,5 +241,5 @@ Read `AGENT_RUNBOOK.md` before starting cleanup work. The runbook records comman
 
 - Keep the staged checkpoint intact until it is committed or intentionally split.
 - Decide whether to fix the stale Bun shim globally or continue using the direct binary fallback.
-- Start Phase 6 or Phase 7 for another low-risk frontend cleanup slice, or start Rust cleanup now that the Rust baseline is available.
+- Start Phase 6 or Phase 7 for another low-risk frontend cleanup slice, start Phase 8 performance baselining before optimization, or start Rust cleanup now that the Rust baseline is available.
 - Use `AGENT_RUNBOOK.md` to avoid repeating known command/tooling traps.
