@@ -33,8 +33,7 @@ Committed cleanup slices:
 - legacy import helper split
 - unused layout component removal
 Pending worktree at this checkpoint:
-- Phase 6 desktop fallback safety fix
-- Phase 9 Rust store/sync split workers in progress
+- Phase 9 Rust store/sync split integration
 ```
 
 ## Current Constraints
@@ -151,12 +150,12 @@ Pending worktree at this checkpoint:
 
 ## Phase 9: Rust Backend Restructure
 
-- [ ] Split `sync.rs` by identity, operation files, scanning, apply/merge, conflicts/tombstones, and status.
-- [ ] Split `store.rs` by entry CRUD, metadata, indexes, sync state, and test helpers.
-- [ ] Keep FeOxDB key names stable.
-- [ ] Keep Tauri command contracts stable.
-- [ ] Keep shared operation file format stable.
-- [ ] Run Rust validation after each backend slice.
+- [x] Split `sync.rs` by identity, operation files, scanning, apply/merge, conflicts/tombstones, and status.
+- [x] Split `store.rs` by entry CRUD, metadata, indexes, sync state, and test helpers.
+- [x] Keep FeOxDB key names stable.
+- [x] Keep Tauri command contracts stable.
+- [x] Keep shared operation file format stable.
+- [x] Run Rust validation after each backend slice.
 
 ## Phase 10: Native, Export, Import, And Updater Cleanup
 
@@ -206,6 +205,8 @@ Pending worktree at this checkpoint:
 - [x] Worker Euler: Phase 10 Excel export cleanup, completed and committed.
 - [x] Worker Poincare: Phase 10 legacy import cleanup, completed and committed.
 - [x] Worker Lovelace: Phase 10 native helper cleanup, completed and committed.
+- [x] Worker Hegel: Phase 9 store split, completed and integrated with sync split.
+- [x] Worker Lagrange: Phase 9 sync split, completed and integrated with store split.
 
 ## Validation Results
 
@@ -254,6 +255,10 @@ Pending worktree at this checkpoint:
 - Phase 7 shell test split `& "$env:USERPROFILE\.bun\bin\bun.exe" run lint`: pass.
 - Phase 6 desktop fallback fix `& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- src/test/inventory-shell.test.tsx`: pass, 1 file / 21 tests.
 - Phase 6 desktop fallback fix `& "$env:USERPROFILE\.bun\bin\bun.exe" run lint`: pass.
+- Phase 9 store/sync split `cargo fmt -- --check`: pass.
+- Phase 9 store/sync split `cargo test store::tests`: pass, 5 tests.
+- Phase 9 store/sync split `cargo test --test sync_core`: pass, 15 tests.
+- Phase 9 store/sync split `cargo test --test shared_sync_flow`: pass, 21 tests.
 
 ## Next Recommended Slice
 
