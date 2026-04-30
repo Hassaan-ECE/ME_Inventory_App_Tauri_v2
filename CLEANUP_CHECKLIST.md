@@ -286,5 +286,44 @@ Pending worktree at this checkpoint:
 
 ## Next Recommended Slice
 
-- Fix the stale global Bun PowerShell shim outside the repo when convenient.
-- Run packaged NSIS, signed updater, shared-drive sync, and real legacy import manual smoke before the next release.
+### Release Smoke
+
+- [ ] Run packaged NSIS install smoke before the next release.
+- [ ] Validate the signed GitHub Releases updater path with a real newer signed release asset.
+- [ ] Run real shared-drive multi-machine sync smoke.
+- [ ] Run real legacy SQLite import smoke.
+
+### Environment / Tooling
+
+- [ ] Fix the stale global Bun PowerShell shim outside the repo when convenient.
+
+### Next Release Prep
+
+- [ ] Bump or reconcile the source version when preparing the next release after `0.9.8`.
+- [ ] Confirm release assets include the NSIS installer, generated `.sig`, SHA-256 sums, and GitHub `latest.json`.
+- [ ] Record manual smoke evidence: installer path, updater `.sig` path, commit, source version, tester, and date.
+
+### Sync Roadmap
+
+- [ ] Finish shared sync snapshots.
+- [ ] Add shared sync manifest validation.
+- [ ] Add single-writer sync compaction.
+- [ ] Add conflict UI.
+- [ ] Run locked-file shared sync smoke.
+- [ ] Add shared media storage.
+
+### Data / Import Roadmap
+
+- [ ] Add import issue tracking for legacy SQLite import.
+- [ ] Add clearer unknown-schema errors for legacy SQLite import.
+- [ ] Add FeOxDB schema versioning and a future migration path.
+
+### Performance / Manual QA
+
+- [ ] Benchmark real inventory size for search, sort, startup, sync, and table rendering.
+- [ ] Confirm UNC picture path behavior in a packaged smoke.
+
+### Deferred Decisions
+
+- [ ] Decide whether entries should move from the current compatibility projection to future `inventory:item:*` and ledger keyspaces.
+- [ ] Keep HTML export as an explicit placeholder unless it becomes a real requirement.
