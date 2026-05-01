@@ -71,9 +71,9 @@ Read `docs/engineering/AGENT_RUNBOOK.md` before release work. Completed cleanup 
 - [x] Remove legacy database runtime paths and bundled `.db` resources.
 - [x] Add FeOxDB snapshot/manifest bootstrap and operation-log compaction.
 - [x] Add one-time local deprecated `.db` quarantine.
-- [ ] Build signed `1.0.0` updater package.
-- [ ] Stage local and shared `1.0.0` release assets.
-- [ ] Upload `1.0.0` assets to GitHub Release `v1.0.0`.
+- [x] Build signed `1.0.0` updater package.
+- [x] Stage local and shared `1.0.0` release assets.
+- [x] Upload `1.0.0` assets to GitHub Release `v1.0.0`.
 - [ ] Validate installed `0.9.9` updates to signed `1.0.0`.
 - [ ] Run real shared-drive multi-machine sync smoke.
 
@@ -109,15 +109,15 @@ Read `docs/engineering/AGENT_RUNBOOK.md` before release work. Completed cleanup 
 | `0.9.9` signed package build/staging | 2026-05-01 | Syed Hassaan Shah | Build machine | `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\0.9.9\ME Inventory_0.9.9_x64-setup.exe` | `c2743f18f6a6e7fb1353a670fdbee77450357c4f751f8a8ce3c1a6ce2b651266` | Pass | Shows local FeOxDB rows before shared sync, publishes saved changes to S-drive from a backend background task, keeps frontend sync coalesced, and lowers fallback polling to 500ms. |
 | `0.9.9` GitHub Release asset upload | 2026-05-01 | Syed Hassaan Shah | GitHub | `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v0.9.9` | `c2743f18f6a6e7fb1353a670fdbee77450357c4f751f8a8ce3c1a6ce2b651266` | Pass | Uploaded `latest.json`, installer, `.sig`, and `SHA256SUMS.txt`; `releases/latest/download/latest.json` resolves to `0.9.9` and the installer asset returns HTTP 200. |
 | `0.9.9` signed GitHub updater smoke |  |  |  |  |  |  |  |
-| `1.0.0` FeOxDB-only cleanup implementation | 2026-05-01 | Codex | Build machine | Source tree |  | In progress | Removes active legacy database code, adds snapshot/manifest bootstrap, compaction, and local deprecated `.db` quarantine. |
-| `1.0.0` signed package build/staging |  |  |  |  |  |  |  |
-| `1.0.0` GitHub Release asset upload |  |  |  |  |  |  |  |
+| `1.0.0` FeOxDB-only cleanup implementation | 2026-05-01 | Codex | Build machine | Source tree |  | Pass | Removes active legacy database code, adds snapshot/manifest bootstrap, compaction, and local deprecated `.db` quarantine. |
+| `1.0.0` signed package build/staging | 2026-05-01 | Codex | Build machine | `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.0\ME Inventory_1.0.0_x64-setup.exe` | `0846d4f24eca14da78d621836958972604126b54c2148f5ce5cba41e16034200` | Pass | Tauri NSIS wrapper reported Windows error 1224 after producing the installer, so the installer was manually signed with the same updater key. |
+| `1.0.0` GitHub Release asset upload | 2026-05-01 | Codex | GitHub | `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v1.0.0` | `0846d4f24eca14da78d621836958972604126b54c2148f5ce5cba41e16034200` | Pass | Uploaded `latest.json`, installer, `.sig`, and `SHA256SUMS.txt`; `releases/latest/download/latest.json` resolves to `1.0.0` and the installer asset returns HTTP 200. |
 | `1.0.0` signed GitHub updater smoke |  |  |  |  |  |  |  |
 | Real shared-drive multi-machine sync smoke |  |  |  |  |  |  |  |
 
 ## Current Blockers
 
-- `1.0.0` still needs signed package build, release staging, GitHub upload, and installed updater smoke.
+- `1.0.0` still needs installed updater smoke from `0.9.9`.
 - Real two-machine smoke still needs to validate snapshot bootstrap, operation compaction, fast convergence, and field-level merge on the S-drive.
 
 ## Current Artifact Paths
