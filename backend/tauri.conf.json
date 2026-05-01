@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ME Inventory",
+  "version": "1.0.0",
+  "identifier": "com.me.inventory",
+  "build": {
+    "beforeDevCommand": "node node_modules/vite/bin/vite.js --config frontend/vite.config.ts",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc -b tsconfig.json && node --max-old-space-size=4096 node_modules/vite/bin/vite.js build --config frontend/vite.config.ts",
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "ME Inventory",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 1100,
+        "minHeight": 720,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPCACHE/**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": ["nsis"],
+    "publisher": "Syed Hassaan Shah",
+    "copyright": "Copyright (c) 2026 Syed Hassaan Shah",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "installerHooks": "windows/nsis-hooks.nsh"
+      }
+    },
+    "icon": ["icons/icon.ico"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhCRjYzQkE5QTU0ODhDOEUKUldTT2pFaWxxVHYyaStxTmdLMlFDNDdsTEtCMTdtZkw5eGdEcjlkZHhSTFVVMVVFTFQySE94VnQK",
+      "endpoints": [
+        "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "quiet"
+      }
+    }
+  }
+}

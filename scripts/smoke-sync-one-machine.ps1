@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$manifestPath = Join-Path $repoRoot "src-tauri\Cargo.toml"
+$manifestPath = Join-Path $repoRoot "backend\Cargo.toml"
 $tempRoot = [System.IO.Path]::GetFullPath($env:TEMP)
 $resolvedSmokeRoot = [System.IO.Path]::GetFullPath($SmokeRoot)
 

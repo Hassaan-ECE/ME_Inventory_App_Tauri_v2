@@ -1,6 +1,6 @@
 # ME Inventory
 
-Last consolidated: 2026-04-29
+Last consolidated: 2026-05-01
 
 ME Inventory is a Windows desktop inventory app built with Tauri 2, React 19, TypeScript, Vite, Tailwind CSS v4, Bun, Rust, and FeOxDB.
 
@@ -12,15 +12,25 @@ This README is the canonical project doc. Older planning notes, smoke logs, and 
 
 - Active workspace: `c:\Projects\Active\ME_Inventory_App_Tauri_v2`
 - App name: `ME Inventory`
-- Display name: `ME Inventory v0.9.8`
-- Version source: `package.json`, `src-tauri\Cargo.toml`, and `src-tauri\tauri.conf.json`
+- Display name: `ME Inventory v1.0.0`
+- Version source: `package.json`, `backend\Cargo.toml`, and `backend\tauri.conf.json`
 - Tauri identifier: `com.me.inventory`
 - Install mode: current-user NSIS install
 - Updater: signed Tauri updater with GitHub Releases static metadata
 - Runtime database: local FeOxDB file named `inventory.feox`
-- Legacy SQLite role: read-only first-run import source only
+- Shared sync: S-drive FeOx operation logs plus manifest/snapshot bootstrap
+- Deprecated local `.db` files: quarantined once into app-data backups and never used as data sources
 
-Version note: `0.9.8` is the current source truth for this release checkpoint.
+Version note: `1.0.0` is the current source truth for the signed updater target. `0.9.9` is the expected updater baseline for installed-machine smoke.
+
+## Project Layout
+
+```text
+frontend/     React/Vite UI, frontend tests, UI assets, and Tauri bridge code
+backend/      Tauri/Rust app, commands, storage, sync, export, import, and native helpers
+docs/         Engineering runbooks, cleanup checklists, and performance baselines
+scripts/      Smoke/manual automation scripts
+```
 
 ## What Works Now
 
@@ -29,8 +39,7 @@ Version note: `0.9.8` is the current source truth for this release checkpoint.
 - Tauri 2 shell with one main window.
 - Current-user NSIS packaging.
 - App data is stored under the Tauri app data folder for `com.me.inventory`.
-- Bundled seed resources include `data\me_inventory.db` and `data\me_lab_inventory.db`.
-- The installed app has been smoke-tested in the past for launch, first-run import, local persistence, and uninstall/reinstall preserving app data. Rerun the release checklist before shipping a new build.
+- The installed app has been smoke-tested in the past for launch, local persistence, shared sync, and uninstall/reinstall preserving app data. Rerun the release checklist before shipping a new build.
 
 ### Inventory UI
 
@@ -67,22 +76,14 @@ The current `InventoryEntry` projection supports:
 
 This is a compatibility projection for the existing ME Lab Inventory workflow. It is not the future ledger-based stock model yet.
 
-### Local Storage And Import
+### Local Storage
 
 - FeOxDB is the authoritative runtime store.
 - Entries are stored under `entry:{entry_uuid}`.
-- Metadata stores next numeric entry ID, legacy import state, sync identity, local sequence state, outbox records, applied operation markers, entry sync state, tombstones, conflicts, and corrupt remote-file records.
-- First startup imports from legacy SQLite only when FeOxDB has no entries and no import marker.
-- Import candidates:
-  - `ME_INVENTORY_LEGACY_SQLITE`
-  - `data\me_inventory.db`
-  - `data\me_lab_inventory.db`
-  - bundled resource copies of those files
-- Supported SQLite schemas:
-  - current `entries`
-  - legacy `equipment` with `record_id` and `record_uuid` compatibility mapping
-
-SQLite stays read-only. After import, FeOxDB owns the data.
+- Metadata stores next numeric entry ID, sync identity, local sequence state, snapshot state, outbox records, applied operation markers, entry sync state, tombstones, conflicts, and corrupt remote-file records.
+- Startup opens `inventory.feox` directly and does not inspect any legacy database files.
+- On first `1.0.0` startup, known old app-owned `.db` files are moved to `deprecated-db-backups` under app data.
+- Normal commands read and write FeOxDB only; load, query, export, mutation, and sync paths do not inspect any other database format.
 
 ### Native Links And Pictures
 
@@ -108,7 +109,7 @@ SQLite stays read-only. After import, FeOxDB owns the data.
 
 ### Shared Sync Foundation
 
-The app has the first shared-drive operation-log sync layer.
+`0.9.7` moved normal shared workflow to local FeOxDB plus S-drive operation logs. `0.9.8` made FeOxDB shared sync near-live. `0.9.9` showed local FeOxDB rows before shared sync and published saved changes from a backend background task. `1.0.0` removes the old database import path and makes FeOxDB snapshots plus operation logs the clean-install bootstrap path.
 
 - Each installation owns its local FeOxDB file.
 - Clients do not mutate one shared FeOxDB file.
@@ -121,8 +122,24 @@ The app has the first shared-drive operation-log sync layer.
 <shared root>\shared\inventory\ops\{client_id}\000000000001.op.json
 ```
 
+- Snapshot files are written under:
+
+```text
+<shared root>\shared\inventory\snapshots\snapshot-*.snapshot.json
+```
+
+- The latest snapshot is advertised by:
+
+```text
+<shared root>\shared\inventory\manifest.json
+```
+
 - Local mutations queue durable outbox operations before FeOxDB flush.
 - Shared sync pushes pending local operations and pulls remote operations.
+- Clean machines apply the latest verified snapshot, then apply operation files newer than the snapshot watermarks.
+- Snapshot publishing uses a single-writer lock under `shared\inventory\locks`.
+- Covered operation files are compacted after the snapshot and manifest are verified.
+- Snapshot and manifest failures leave local FeOxDB untouched and keep the app on operation-log sync.
 - Operation files use checksums and temp-file-then-rename writes.
 - Readers ignore temp files, corrupt JSON, unknown extensions, checksum-invalid files, and identity-mismatched operation files.
 - Last-write-wins entry state uses `(mutation_ts_utc, op_id)` ordering.
@@ -131,9 +148,10 @@ The app has the first shared-drive operation-log sync layer.
 - Newer upserts after a tombstone restore the entry.
 - Repeated syncs are intended to be idempotent.
 - The native watcher emits `inventory:shared-changed`; the frontend coalesces sync work so overlapping sync passes do not stack up.
-- The frontend status reports local readiness, shared-root availability, local-only pending state, mutation mode, and revision.
+- Open clients also run a 500ms fallback sync poll so S-drive changes still land quickly when the network filesystem watcher misses a remote change.
+- The frontend status reports local readiness, shared-root availability, local-only pending state, mutation mode, revision, and last snapshot id.
 
-Shared sync is not complete yet. Snapshots, manifest publishing, single-writer compaction, conflict UI, shared media storage, and multi-machine release smoke remain open.
+The FeOxDB operation-log path now merges concurrent non-overlapping field edits when both edits started from the same base version. Overlapping edits still use the existing last-newer-operation-wins behavior and record stale conflicts.
 
 ### Signed Tauri Updater
 
@@ -143,7 +161,7 @@ The app uses the official signed Tauri updater. Update metadata is expected at:
 https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/latest/download/latest.json
 ```
 
-- `src-tauri\tauri.conf.json` stores the updater public key and endpoint.
+- `backend\tauri.conf.json` stores the updater public key and endpoint.
 - The private signing key is generated outside the repo at `%USERPROFILE%\.tauri\me-inventory-updater.key`.
 - The private key and password must never be committed.
 - `bundle.createUpdaterArtifacts` is enabled so release builds produce updater artifacts and signatures.
@@ -192,13 +210,13 @@ powershell -ExecutionPolicy Bypass -File scripts\smoke-sync-one-machine.ps1
 Build the Windows NSIS installer:
 
 ```powershell
-bun tauri build --bundles nsis
+bun run build:desktop
 ```
 
 Installer output:
 
 ```powershell
-src-tauri\target\release\bundle\nsis\
+backend\target\release\bundle\nsis\
 ```
 
 ## Tauri Commands
@@ -213,7 +231,6 @@ The React bridge calls these commands:
 - `toggle_verified_entry`
 - `set_archived_entry`
 - `delete_entry`
-- `import_legacy_sqlite`
 - `load_picture_preview`
 - `export_excel`
 - `open_external`
@@ -226,55 +243,57 @@ The React bridge calls these commands:
 
 Before building a release candidate:
 
-```powershell
-bun run lint
-bun run build
-bun run test
+The global Bun PowerShell shim can resolve to a stale wrapper on this workstation. Use the direct Bun binary for release validation until the shim is fixed:
 
-Push-Location src-tauri
+```powershell
+& "$env:USERPROFILE\.bun\bin\bun.exe" run lint
+& "$env:USERPROFILE\.bun\bin\bun.exe" run test
+& "$env:USERPROFILE\.bun\bin\bun.exe" run build
+
+Push-Location backend
 cargo fmt -- --check
 cargo check
 cargo test
 Pop-Location
-
-bun tauri build --bundles nsis
 ```
 
-For signed updater releases, build with the updater private key available outside the repo:
+For signed updater releases, build with the updater private key available outside the repo. The fresh `0.9.x` smoke line rotated the updater key at `%USERPROFILE%\.tauri\me-inventory-updater.key`; keep that private key out of the repo.
 
 ```powershell
 $env:PATH = "$env:USERPROFILE\.bun\bin;$env:PATH"
 $env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content -LiteralPath "$env:USERPROFILE\.tauri\me-inventory-updater.key" -Raw).Trim()
 $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
-bun tauri build --bundles nsis
+& "$env:USERPROFILE\.bun\bin\bun.exe" run build:desktop
 Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY
 Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ```
 
-Publish the generated NSIS installer, its `.sig` file, and a GitHub Release asset named `latest.json`. Static updater metadata must include the Tauri updater fields for the Windows platform:
+Fresh shared-release staging uses `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases`. Before restarting at `0.9.0`, archive existing release folders into `backups\old-releases-YYYYMMDD-HHMMSS\` and back up root `current.json` as `backups\current-before-fresh-0.9.0-YYYYMMDD-HHMMSS.json`.
+
+Publish the generated `0.9.1` NSIS installer, its `.sig` file, SHA-256 sums, and a GitHub Release asset named `latest.json`. The GitHub CLI is not installed on this workstation, so upload the staged files manually to a non-draft, non-prerelease GitHub Release tagged `v0.9.1`. Static updater metadata must include the Tauri updater fields for the Windows platform:
 
 ```json
 {
-  "version": "0.9.8",
+  "version": "0.9.1",
   "notes": "Release notes",
-  "pub_date": "2026-04-29T00:00:00Z",
+  "pub_date": "2026-04-30T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "contents of the generated .sig file",
-      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v0.9.8/ME%20Inventory_0.9.8_x64-setup.exe"
+      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v0.9.1/ME%20Inventory_0.9.1_x64-setup.exe"
     }
   }
 }
 ```
 
-Manual smoke for a release candidate:
+Fresh `1.0.0` manual smoke:
 
-- Confirm `package.json`, `src-tauri\Cargo.toml`, and `src-tauri\tauri.conf.json` versions match.
+- Confirm `package.json`, `backend\Cargo.toml`, and `backend\tauri.conf.json` versions match.
 - Confirm the app identifier is still `com.me.inventory`.
-- Install as the current Windows user.
+- Update an installed `0.9.9` machine to `1.0.0`.
 - Launch from the installed shortcut.
-- Confirm the visible name and version.
-- On clean app data, confirm first-run SQLite import loads entries once.
+- Confirm the visible name and version are `ME Inventory v1.0.0`.
+- On clean app data, confirm startup hydrates from the S-drive FeOx snapshot and newer operation files.
 - Close and reopen, then confirm row count stays stable.
 - Add, edit, verify, archive, restore, and delete a disposable smoke entry.
 - Save and open a safe `https://` link.
@@ -283,10 +302,10 @@ Manual smoke for a release candidate:
 - Confirm a missing picture path shows the missing state without crashing.
 - Export Excel, cancel once, then save once to a path with spaces.
 - Open the workbook and confirm exactly `Inventory` and `Archive` sheets.
-- Confirm the updater stays quiet when no newer signed GitHub Release metadata exists.
-- If a newer signed release exists, confirm check, download progress, install, and relaunch/update behavior.
-- If a shared test root is available, confirm local pending operations push and another client can pull them.
-- Record installer path, updater `.sig` path, commit, source version, tester, and date.
+- Upload the staged `1.0.0` GitHub Release assets, then from the installed `0.9.9` app confirm update check, download progress, install, and relaunch/update behavior.
+- Run a real shared-drive multi-machine smoke and confirm create/update/delete convergence plus stale-update conflict logging.
+- Confirm known old app-owned `.db` files are moved to `deprecated-db-backups` and are not loaded.
+- Record installer path, updater `.sig` path, GitHub release URL, SHA-256, commit, source version, tester, machines, result, and date.
 
 Known release caveats:
 
@@ -302,13 +321,13 @@ Use this when the app feels sluggish, memory grows after repeated UI work, or sy
 Static source sweep:
 
 ```powershell
-rg -n "useEffect|addEventListener|removeEventListener|setInterval|clearInterval|setTimeout|clearTimeout|ResizeObserver|URL\.createObjectURL|invoke\(|listen\(|unlisten|on[A-Z].*Changed" src src-tauri/src src-tauri/tests
+rg -n "useEffect|addEventListener|removeEventListener|setInterval|clearInterval|setTimeout|clearTimeout|ResizeObserver|URL\.createObjectURL|invoke\(|listen\(|unlisten|on[A-Z].*Changed" frontend/src backend/src backend/tests
 ```
 
 Rust retention and file IO sweep:
 
 ```powershell
-rg -n "Arc|Mutex|RwLock|static|thread|spawn|channel|range_query|collect::<|Vec<|fs::read|File::|Workbook|Connection::open" src-tauri/src src-tauri/tests
+rg -n "Arc|Mutex|RwLock|static|thread|spawn|channel|range_query|collect::<|Vec<|fs::read|File::|Workbook" backend/src backend/tests
 ```
 
 Manual exercise:
@@ -321,11 +340,9 @@ Manual exercise:
 
 ## Open Work
 
-- Bump or reconcile the source version when preparing the next release after `0.9.8`.
-- Validate the signed GitHub Releases updater path with a real release asset.
-- Finish shared sync snapshots, manifest validation, single-writer compaction, conflict UI, locked-file smoke, and shared media storage.
+- Run real shared-drive multi-machine `1.0.0` update smoke from installed `0.9.9`.
+- Add conflict UI, locked-file smoke, and shared media storage.
 - Decide whether entries should move from the current compatibility projection to future `inventory:item:*` and ledger keyspaces.
-- Add import issue tracking and clearer unknown-schema errors for legacy SQLite import.
 - Benchmark real inventory size for search, sort, startup, sync, and table rendering.
 - Add FeOxDB schema versioning and a future migration path.
 - Confirm UNC picture path behavior in a packaged smoke.

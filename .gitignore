@@ -9,10 +9,11 @@ lerna-debug.log*
 
 node_modules
 dist
+frontend/dist
 dist-ssr
 release
-src-tauri/target
-src-tauri/gen
+backend/target
+backend/gen
 .tmp
 coverage
 .nyc_output
