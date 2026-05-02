@@ -176,6 +176,7 @@ mod preview_cache {
         collections::hash_map::DefaultHasher,
         fs,
         hash::{Hash, Hasher},
+        io::Read,
         path::{Path, PathBuf},
         time::UNIX_EPOCH,
     };
@@ -195,6 +196,9 @@ mod preview_cache {
 
         let metadata = fs::metadata(&path).map_err(|error| error.to_string())?;
         if metadata.len() > MAX_PREVIEW_SOURCE_BYTES {
+            return Ok(None);
+        }
+        if !has_supported_image_signature(&path)? {
             return Ok(None);
         }
 
@@ -243,6 +247,24 @@ mod preview_cache {
         Ok(())
     }
 
+    fn has_supported_image_signature(path: &Path) -> CommandResult<bool> {
+        let mut file = fs::File::open(path).map_err(|error| error.to_string())?;
+        let mut header = [0u8; 12];
+        let bytes_read = file.read(&mut header).map_err(|error| error.to_string())?;
+        Ok(is_supported_image_signature(&header[..bytes_read]))
+    }
+
+    fn is_supported_image_signature(header: &[u8]) -> bool {
+        header.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a])
+            || header.starts_with(&[0xff, 0xd8, 0xff])
+            || header.starts_with(b"GIF87a")
+            || header.starts_with(b"GIF89a")
+            || header.starts_with(b"BM")
+            || header.starts_with(b"II*\0")
+            || header.starts_with(b"MM\0*")
+            || (header.len() >= 12 && header.starts_with(b"RIFF") && &header[8..12] == b"WEBP")
+    }
+
     fn picture_preview_fingerprint(path: &Path, metadata: &fs::Metadata) -> u64 {
         let mut hasher = DefaultHasher::new();
         path.to_string_lossy()
@@ -263,7 +285,7 @@ mod preview_cache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{fs, io::Write};
 
     #[test]
     fn external_urls_allow_only_safe_protocols() {
@@ -350,7 +372,7 @@ mod tests {
             uuid::Uuid::new_v4().simple()
         ));
         let cache_dir = temp_test_dir("me-inventory-preview-cache-valid");
-        fs::write(&path, [0x89, b'P', b'N', b'G']).unwrap();
+        fs::write(&path, [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]).unwrap();
 
         let preview = build_picture_preview_file(path.to_string_lossy().as_ref(), &cache_dir)
             .unwrap()
@@ -358,7 +380,10 @@ mod tests {
         let preview_path = PathBuf::from(preview);
 
         assert!(preview_path.starts_with(cache_dir.join(PREVIEW_CACHE_DIR_NAME)));
-        assert_eq!(fs::read(preview_path).unwrap(), [0x89, b'P', b'N', b'G']);
+        assert_eq!(
+            fs::read(preview_path).unwrap(),
+            [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]
+        );
 
         let _ = fs::remove_file(path);
         let _ = fs::remove_dir_all(cache_dir);
@@ -371,7 +396,8 @@ mod tests {
             uuid::Uuid::new_v4().simple()
         ));
         let cache_dir = temp_test_dir("me-inventory-preview-cache-camera");
-        let file = fs::File::create(&path).unwrap();
+        let mut file = fs::File::create(&path).unwrap();
+        file.write_all(&[0xff, 0xd8, 0xff, 0xe0]).unwrap();
         file.set_len(3 * 1024 * 1024).unwrap();
         drop(file);
 
@@ -380,6 +406,24 @@ mod tests {
             .expect("common camera-sized image should create a cached preview");
 
         assert!(PathBuf::from(preview).is_file());
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_dir_all(cache_dir);
+    }
+
+    #[test]
+    fn preview_cache_rejects_non_image_content_with_supported_extension() {
+        let path = std::env::temp_dir().join(format!(
+            "me-inventory-preview-not-image-{}.png",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let cache_dir = temp_test_dir("me-inventory-preview-cache-not-image");
+        fs::write(&path, b"not really an image").unwrap();
+
+        let preview =
+            build_picture_preview_file(path.to_string_lossy().as_ref(), &cache_dir).unwrap();
+
+        assert_eq!(preview, None);
 
         let _ = fs::remove_file(path);
         let _ = fs::remove_dir_all(cache_dir);

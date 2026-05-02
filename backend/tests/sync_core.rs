@@ -16,10 +16,12 @@ use sync::{
     allocate_local_sequence, build_delete_operation, build_entry_operation,
     canonical_operation_checksum, canonical_operation_json, corrupt_remote_record_id,
     ensure_operation_log_layout, get_or_create_client_identity, operation_file_name,
-    read_operation_file, record_corrupt_remote_file, resolve_shared_root_from_env_value,
-    scan_operation_files, scan_operation_files_after_watermarks, sha256_hex, write_operation_file,
-    CorruptRemoteFile, CorruptRemoteReason, SharedSyncPaths, SyncClientIdentity, SyncCoreErrorKind,
-    SyncOperationEnvelope, SyncOperationPayload, SyncOperationType, DEFAULT_SHARED_ROOT,
+    operation_file_path, queue_entry_operation, read_operation_file, record_corrupt_remote_file,
+    recover_local_sync_state, resolve_shared_root_from_env_value, scan_operation_files,
+    scan_operation_files_after_watermarks, sha256_hex, write_operation_file, CorruptRemoteFile,
+    CorruptRemoteReason, SharedSyncPaths, SyncClientIdentity, SyncCoreErrorKind, SyncEntryState,
+    SyncOperationEnvelope, SyncOperationPayload, SyncOperationType, SyncTombstoneRecord,
+    DEFAULT_SHARED_ROOT, SNAPSHOT_APPLY_PENDING_KEY,
 };
 use uuid::Uuid;
 
@@ -120,6 +122,112 @@ fn write_operation_file_uses_final_op_path_and_read_validates_it() {
 }
 
 #[test]
+fn hmac_signed_operation_reads_successfully_when_key_is_configured() {
+    let _hmac = sync::set_test_hmac_key(Some("0123456789abcdef"));
+    let root = unique_test_dir("sync-hmac-signed-operation");
+    let paths = SharedSyncPaths::from_shared_root(&root);
+    ensure_operation_log_layout(&paths).unwrap();
+    let identity = SyncClientIdentity {
+        client_id: "client-hmac-signed".to_string(),
+        device_id: "device-hmac-signed".to_string(),
+    };
+    let operation = build_entry_operation(
+        &identity,
+        1,
+        SyncOperationType::InventoryEntryCreate,
+        sample_entry("entry-hmac-signed"),
+        Vec::new(),
+        None,
+    )
+    .unwrap();
+
+    assert!(operation
+        .auth
+        .as_deref()
+        .unwrap_or("")
+        .starts_with("hmac-sha256:"));
+    let path = write_operation_file(&paths, &operation).unwrap();
+    let read_back = read_operation_file(&path).unwrap();
+
+    assert_eq!(read_back.op_id, operation.op_id);
+    assert_eq!(read_back.auth, operation.auth);
+}
+
+#[test]
+fn hmac_rejects_unsigned_tampered_and_wrong_key_operations() {
+    let root = unique_test_dir("sync-hmac-rejected-operation");
+    let paths = SharedSyncPaths::from_shared_root(&root);
+    ensure_operation_log_layout(&paths).unwrap();
+
+    let _hmac = sync::set_test_hmac_key(Some("0123456789abcdef"));
+    let unsigned = sample_operation("client-hmac-unsigned", 1, "entry-hmac-unsigned");
+    write_raw_operation(&paths, &unsigned);
+    let unsigned_path =
+        operation_file_path(&paths, &unsigned.client_id, unsigned.local_seq).unwrap();
+    let unsigned_corrupt = read_operation_file(&unsigned_path).unwrap_err();
+    assert_eq!(
+        unsigned_corrupt.reason,
+        CorruptRemoteReason::InvalidEnvelope
+    );
+    assert!(unsigned_corrupt.detail.contains("authentication"));
+
+    let identity = SyncClientIdentity {
+        client_id: "client-hmac-tampered".to_string(),
+        device_id: "device-hmac-tampered".to_string(),
+    };
+    let mut tampered = build_entry_operation(
+        &identity,
+        1,
+        SyncOperationType::InventoryEntryUpdate,
+        sample_entry("entry-hmac-tampered"),
+        vec!["description".to_string()],
+        None,
+    )
+    .unwrap();
+    tampered.payload.entry.as_mut().unwrap().description = "Tampered".to_string();
+    tampered.checksum = canonical_operation_checksum(&tampered).unwrap();
+    write_raw_operation(&paths, &tampered);
+    let tampered_path =
+        operation_file_path(&paths, &tampered.client_id, tampered.local_seq).unwrap();
+    let tampered_corrupt = read_operation_file(&tampered_path).unwrap_err();
+    assert_eq!(
+        tampered_corrupt.reason,
+        CorruptRemoteReason::InvalidEnvelope
+    );
+    assert!(tampered_corrupt.detail.contains("HMAC"));
+
+    let identity = SyncClientIdentity {
+        client_id: "client-hmac-wrong-key".to_string(),
+        device_id: "device-hmac-wrong-key".to_string(),
+    };
+    let signed_with_first_key = build_entry_operation(
+        &identity,
+        1,
+        SyncOperationType::InventoryEntryCreate,
+        sample_entry("entry-hmac-wrong-key"),
+        Vec::new(),
+        None,
+    )
+    .unwrap();
+    write_raw_operation(&paths, &signed_with_first_key);
+
+    drop(_hmac);
+    let _wrong_hmac = sync::set_test_hmac_key(Some("fedcba9876543210"));
+    let wrong_key_path = operation_file_path(
+        &paths,
+        &signed_with_first_key.client_id,
+        signed_with_first_key.local_seq,
+    )
+    .unwrap();
+    let wrong_key_corrupt = read_operation_file(&wrong_key_path).unwrap_err();
+    assert_eq!(
+        wrong_key_corrupt.reason,
+        CorruptRemoteReason::InvalidEnvelope
+    );
+    assert!(wrong_key_corrupt.detail.contains("HMAC"));
+}
+
+#[test]
 fn scan_operation_files_ignores_temps_and_reports_corrupt_remote_files() {
     let root = unique_test_dir("sync-scan");
     let paths = SharedSyncPaths::from_shared_root(&root);
@@ -186,6 +294,445 @@ fn scan_operation_files_ignores_temps_and_reports_corrupt_remote_files() {
     assert!(reasons.contains(&CorruptRemoteReason::ClientIdMismatch));
     assert!(reasons.contains(&CorruptRemoteReason::LocalSeqMismatch));
     assert!(reasons.contains(&CorruptRemoteReason::InvalidEnvelope));
+}
+
+#[test]
+fn read_operation_file_rejects_malformed_remote_timestamps() {
+    let root = unique_test_dir("sync-invalid-timestamp");
+    let paths = SharedSyncPaths::from_shared_root(&root);
+    ensure_operation_log_layout(&paths).unwrap();
+
+    let mut operation = sample_operation("client-invalid-timestamp", 1, "entry-invalid-timestamp");
+    operation.mutation_ts_utc = "not-a-timestamp".to_string();
+    operation.checksum = canonical_operation_checksum(&operation).unwrap();
+    write_raw_operation(&paths, &operation);
+
+    let path = operation_file_path(&paths, &operation.client_id, operation.local_seq).unwrap();
+    let corrupt = read_operation_file(&path).unwrap_err();
+
+    assert_eq!(corrupt.reason, CorruptRemoteReason::InvalidEnvelope);
+    assert!(corrupt.detail.contains("mutation_ts_utc"));
+}
+
+#[test]
+fn read_operation_file_rejects_non_utc_remote_timestamps() {
+    let root = unique_test_dir("sync-non-utc-timestamp");
+    let paths = SharedSyncPaths::from_shared_root(&root);
+    ensure_operation_log_layout(&paths).unwrap();
+
+    let mut operation = sample_operation("client-non-utc-timestamp", 1, "entry-non-utc-timestamp");
+    operation.created_at_utc = "2026-04-26T08:00:00.000-05:00".to_string();
+    operation.checksum = canonical_operation_checksum(&operation).unwrap();
+    write_raw_operation(&paths, &operation);
+
+    let path = operation_file_path(&paths, &operation.client_id, operation.local_seq).unwrap();
+    let corrupt = read_operation_file(&path).unwrap_err();
+
+    assert_eq!(corrupt.reason, CorruptRemoteReason::InvalidEnvelope);
+    assert!(corrupt.detail.contains("created_at_utc"));
+    assert!(corrupt.detail.contains("UTC"));
+}
+
+#[test]
+fn read_operation_file_accepts_old_and_future_utc_timestamps() {
+    let root = unique_test_dir("sync-valid-skewed-timestamps");
+    let paths = SharedSyncPaths::from_shared_root(&root);
+    ensure_operation_log_layout(&paths).unwrap();
+
+    let mut old_operation = sample_operation("client-old-timestamp", 1, "entry-old-timestamp");
+    old_operation.created_at_utc = "2001-01-01T00:00:00.000Z".to_string();
+    old_operation.mutation_ts_utc = "2001-01-01T00:00:00.000Z".to_string();
+    old_operation.payload.entry.as_mut().unwrap().updated_at =
+        old_operation.mutation_ts_utc.clone();
+    old_operation.checksum = canonical_operation_checksum(&old_operation).unwrap();
+    write_raw_operation(&paths, &old_operation);
+
+    let mut future_operation =
+        sample_operation("client-future-timestamp", 1, "entry-future-timestamp");
+    future_operation.created_at_utc = "2099-01-01T00:00:00.000Z".to_string();
+    future_operation.mutation_ts_utc = "2099-01-01T00:00:00.000Z".to_string();
+    future_operation.payload.entry.as_mut().unwrap().updated_at =
+        future_operation.mutation_ts_utc.clone();
+    future_operation.checksum = canonical_operation_checksum(&future_operation).unwrap();
+    write_raw_operation(&paths, &future_operation);
+
+    assert!(read_operation_file(
+        &operation_file_path(&paths, &old_operation.client_id, old_operation.local_seq).unwrap()
+    )
+    .is_ok());
+    assert!(read_operation_file(
+        &operation_file_path(
+            &paths,
+            &future_operation.client_id,
+            future_operation.local_seq
+        )
+        .unwrap()
+    )
+    .is_ok());
+}
+
+#[test]
+fn read_operation_file_rejects_non_utc_mutation_and_delete_payload_timestamps() {
+    let root = unique_test_dir("sync-non-utc-mutation-delete");
+    let paths = SharedSyncPaths::from_shared_root(&root);
+    ensure_operation_log_layout(&paths).unwrap();
+
+    let mut update_operation =
+        sample_operation("client-non-utc-mutation", 1, "entry-non-utc-mutation");
+    update_operation.mutation_ts_utc = "2026-04-26T08:00:00.000-05:00".to_string();
+    update_operation.payload.entry.as_mut().unwrap().updated_at =
+        update_operation.mutation_ts_utc.clone();
+    update_operation.checksum = canonical_operation_checksum(&update_operation).unwrap();
+    write_raw_operation(&paths, &update_operation);
+    let update_corrupt = read_operation_file(
+        &operation_file_path(
+            &paths,
+            &update_operation.client_id,
+            update_operation.local_seq,
+        )
+        .unwrap(),
+    )
+    .unwrap_err();
+    assert_eq!(update_corrupt.reason, CorruptRemoteReason::InvalidEnvelope);
+    assert!(update_corrupt.detail.contains("mutation_ts_utc"));
+
+    let mut delete_operation = build_delete_operation(
+        &SyncClientIdentity {
+            client_id: "client-non-utc-delete".to_string(),
+            device_id: "device-non-utc-delete".to_string(),
+        },
+        1,
+        "entry-non-utc-delete",
+        "2026-04-26T08:00:00.000-05:00",
+        None,
+    )
+    .unwrap();
+    delete_operation.checksum = canonical_operation_checksum(&delete_operation).unwrap();
+    write_raw_operation(&paths, &delete_operation);
+    let delete_corrupt = read_operation_file(
+        &operation_file_path(
+            &paths,
+            &delete_operation.client_id,
+            delete_operation.local_seq,
+        )
+        .unwrap(),
+    )
+    .unwrap_err();
+    assert_eq!(delete_corrupt.reason, CorruptRemoteReason::InvalidEnvelope);
+    assert!(delete_corrupt.detail.contains("payload.deleted_at_utc"));
+}
+
+#[test]
+fn recovery_repairs_partial_local_outbox_operation() {
+    let root = unique_test_dir("sync-recovery-outbox");
+    let db = InventoryDb::open_at(root.join("inventory.feox")).unwrap();
+    let operation = sample_operation("client-recovery", 1, "entry-recovery");
+
+    db.put_sync_outbox_record(operation.local_seq, &operation)
+        .unwrap();
+    db.flush();
+
+    let report = recover_local_sync_state(&db).unwrap();
+
+    assert_eq!(report.repaired_outbox_operations, 1);
+    assert!(db.has_sync_applied_marker(&operation.op_id).unwrap());
+    assert_eq!(
+        db.sync_client_seq_marker::<String>(&operation.client_id, operation.local_seq)
+            .unwrap()
+            .as_deref(),
+        Some(operation.op_id.as_str())
+    );
+    assert!(db.find_entry(&operation.entity_id).unwrap().is_some());
+    assert_eq!(
+        db.sync_entry_state::<SyncEntryState>(&operation.entity_id)
+            .unwrap()
+            .unwrap()
+            .last_op_id,
+        operation.op_id
+    );
+}
+
+#[test]
+fn recovery_replays_current_outbox_update_over_stale_entry() {
+    let root = unique_test_dir("sync-recovery-stale-entry");
+    let db = InventoryDb::open_at(root.join("inventory.feox")).unwrap();
+    let mut stale_entry = sample_entry("entry-recovery-stale");
+    stale_entry.description = "Before crash".to_string();
+    stale_entry.updated_at = "2026-04-26T00:00:00.000Z".to_string();
+    db.put_entry(&stale_entry).unwrap();
+
+    let mut operation = sample_operation("client-recovery-stale", 1, "entry-recovery-stale");
+    operation.mutation_ts_utc = "2026-04-26T00:00:01.000Z".to_string();
+    operation.created_at_utc = operation.mutation_ts_utc.clone();
+    operation.payload.entry.as_mut().unwrap().description = "Recovered update".to_string();
+    operation.payload.entry.as_mut().unwrap().updated_at = operation.mutation_ts_utc.clone();
+    operation.checksum = canonical_operation_checksum(&operation).unwrap();
+    db.put_sync_outbox_record(operation.local_seq, &operation)
+        .unwrap();
+    db.flush();
+
+    let report = recover_local_sync_state(&db).unwrap();
+
+    assert_eq!(report.repaired_outbox_operations, 1);
+    assert_eq!(report.repaired_entries, 1);
+    assert_eq!(
+        db.find_entry("entry-recovery-stale")
+            .unwrap()
+            .unwrap()
+            .description,
+        "Recovered update"
+    );
+    assert_eq!(
+        db.sync_entry_state::<SyncEntryState>("entry-recovery-stale")
+            .unwrap()
+            .unwrap()
+            .last_op_id,
+        operation.op_id
+    );
+}
+
+#[test]
+fn recovery_does_not_replay_stale_outbox_over_newer_state() {
+    let root = unique_test_dir("sync-recovery-stale-outbox");
+    let db = InventoryDb::open_at(root.join("inventory.feox")).unwrap();
+    let mut current_entry = sample_entry("entry-recovery-current");
+    current_entry.description = "Newer state".to_string();
+    current_entry.updated_at = "2026-04-26T00:00:02.000Z".to_string();
+    db.put_entry(&current_entry).unwrap();
+    db.put_sync_entry_state(
+        &current_entry.entry_uuid,
+        &entry_state(
+            &current_entry.entry_uuid,
+            "op-newer-state",
+            "2026-04-26T00:00:02.000Z",
+            false,
+        ),
+    )
+    .unwrap();
+
+    let mut operation = sample_operation("client-recovery-old", 1, "entry-recovery-current");
+    operation.payload.entry.as_mut().unwrap().description = "Old outbox".to_string();
+    operation.checksum = canonical_operation_checksum(&operation).unwrap();
+    db.put_sync_outbox_record(operation.local_seq, &operation)
+        .unwrap();
+    db.flush();
+
+    let report = recover_local_sync_state(&db).unwrap();
+
+    assert_eq!(report.repaired_entries, 0);
+    assert_eq!(
+        db.find_entry("entry-recovery-current")
+            .unwrap()
+            .unwrap()
+            .description,
+        "Newer state"
+    );
+    assert_eq!(
+        db.sync_entry_state::<SyncEntryState>("entry-recovery-current")
+            .unwrap()
+            .unwrap()
+            .last_op_id,
+        "op-newer-state"
+    );
+}
+
+#[test]
+fn recovery_repairs_partial_delete_outbox_operation() {
+    let root = unique_test_dir("sync-recovery-delete");
+    let db = InventoryDb::open_at(root.join("inventory.feox")).unwrap();
+    let entry = sample_entry("entry-recovery-delete");
+    db.put_entry(&entry).unwrap();
+    let operation = build_delete_operation(
+        &SyncClientIdentity {
+            client_id: "client-recovery-delete".to_string(),
+            device_id: "device-recovery-delete".to_string(),
+        },
+        1,
+        entry.entry_uuid.clone(),
+        "2026-04-26T00:00:01.000Z",
+        None,
+    )
+    .unwrap();
+    db.put_sync_outbox_record(operation.local_seq, &operation)
+        .unwrap();
+    db.flush();
+
+    let report = recover_local_sync_state(&db).unwrap();
+
+    assert_eq!(report.repaired_entries, 1);
+    assert_eq!(report.repaired_tombstones, 1);
+    assert!(db.find_entry("entry-recovery-delete").unwrap().is_none());
+    assert_eq!(
+        db.sync_tombstone::<SyncTombstoneRecord>("entry-recovery-delete")
+            .unwrap()
+            .unwrap()
+            .op_id,
+        operation.op_id
+    );
+    assert!(
+        db.sync_entry_state::<SyncEntryState>("entry-recovery-delete")
+            .unwrap()
+            .unwrap()
+            .deleted
+    );
+}
+
+#[test]
+fn recovery_removes_stale_tombstone_when_restored_state_is_newer() {
+    let root = unique_test_dir("sync-recovery-stale-tombstone");
+    let db = InventoryDb::open_at(root.join("inventory.feox")).unwrap();
+    let mut entry = sample_entry("entry-recovery-restore");
+    entry.description = "Restored".to_string();
+    entry.updated_at = "2026-04-26T00:00:02.000Z".to_string();
+    db.put_entry(&entry).unwrap();
+    db.put_sync_tombstone(
+        &entry.entry_uuid,
+        &SyncTombstoneRecord {
+            entry_uuid: entry.entry_uuid.clone(),
+            deleted_at_utc: "2026-04-26T00:00:01.000Z".to_string(),
+            op_id: "op-old-delete".to_string(),
+            client_id: "client-old-delete".to_string(),
+            local_seq: 1,
+            base_version: None,
+        },
+    )
+    .unwrap();
+    db.put_sync_entry_state(
+        &entry.entry_uuid,
+        &entry_state(
+            &entry.entry_uuid,
+            "op-newer-restore",
+            "2026-04-26T00:00:02.000Z",
+            false,
+        ),
+    )
+    .unwrap();
+    db.flush();
+
+    let report = recover_local_sync_state(&db).unwrap();
+
+    assert_eq!(report.repaired_tombstones, 1);
+    assert!(db
+        .sync_tombstone::<SyncTombstoneRecord>("entry-recovery-restore")
+        .unwrap()
+        .is_none());
+    assert!(db.find_entry("entry-recovery-restore").unwrap().is_some());
+}
+
+#[test]
+fn recovery_advances_next_local_sequence_after_existing_outbox() {
+    let root = unique_test_dir("sync-recovery-local-seq");
+    let db = InventoryDb::open_at(root.join("inventory.feox")).unwrap();
+    db.set_next_local_seq(1).unwrap();
+    let operation = sample_operation("client-recovery-seq", 5, "entry-recovery-seq");
+    db.put_sync_outbox_record(operation.local_seq, &operation)
+        .unwrap();
+    db.flush();
+
+    let report = recover_local_sync_state(&db).unwrap();
+
+    assert_eq!(report.repaired_local_sequence_markers, 1);
+    assert_eq!(sync::peek_next_local_sequence(&db).unwrap(), 6);
+}
+
+#[test]
+fn recovery_reports_interrupted_snapshot_apply() {
+    let root = unique_test_dir("sync-recovery-pending-snapshot");
+    let db = InventoryDb::open_at(root.join("inventory.feox")).unwrap();
+    db.put_sync_value(SNAPSHOT_APPLY_PENDING_KEY, b"snapshot-interrupted")
+        .unwrap();
+    db.flush();
+
+    let report = recover_local_sync_state(&db).unwrap();
+
+    assert_eq!(
+        report.snapshot_apply_pending.as_deref(),
+        Some("snapshot-interrupted")
+    );
+    assert!(sync::last_local_recovery_message(&db)
+        .unwrap()
+        .contains("interrupted snapshot"));
+}
+
+#[test]
+fn recovery_reports_pending_snapshot_when_keyspaces_were_partially_replaced() {
+    let root = unique_test_dir("sync-recovery-partial-snapshot");
+    let db = InventoryDb::open_at(root.join("inventory.feox")).unwrap();
+    let entry = sample_entry("entry-partial-snapshot");
+    db.put_sync_value(SNAPSHOT_APPLY_PENDING_KEY, b"snapshot-partial")
+        .unwrap();
+    db.put_entry(&entry).unwrap();
+    db.put_sync_entry_state(
+        &entry.entry_uuid,
+        &entry_state(
+            &entry.entry_uuid,
+            "op-partial-snapshot",
+            "2026-04-26T00:00:00.000Z",
+            false,
+        ),
+    )
+    .unwrap();
+    db.set_sync_watermark("client-partial-snapshot", 3).unwrap();
+    db.flush();
+
+    let report = recover_local_sync_state(&db).unwrap();
+
+    assert_eq!(
+        report.snapshot_apply_pending.as_deref(),
+        Some("snapshot-partial")
+    );
+    assert!(db.find_entry(&entry.entry_uuid).unwrap().is_some());
+    assert_eq!(
+        db.sync_watermark("client-partial-snapshot").unwrap(),
+        Some(3)
+    );
+}
+
+#[test]
+fn recovery_clears_completed_pending_snapshot_apply_marker() {
+    let root = unique_test_dir("sync-recovery-completed-snapshot");
+    let db = InventoryDb::open_at(root.join("inventory.feox")).unwrap();
+    db.put_sync_value(SNAPSHOT_APPLY_PENDING_KEY, b"snapshot-complete")
+        .unwrap();
+    db.set_last_snapshot_id("snapshot-complete").unwrap();
+    db.flush();
+
+    let report = recover_local_sync_state(&db).unwrap();
+
+    assert!(report.snapshot_apply_pending.is_none());
+    assert!(db
+        .get_sync_value(SNAPSHOT_APPLY_PENDING_KEY)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn recovery_leaves_clean_local_operation_state_unchanged() {
+    let root = unique_test_dir("sync-recovery-clean");
+    let db = InventoryDb::open_at(root.join("inventory.feox")).unwrap();
+    let entry = sample_entry("entry-recovery-clean");
+    db.put_entry(&entry).unwrap();
+    queue_entry_operation(
+        &db,
+        SyncOperationType::InventoryEntryCreate,
+        entry,
+        Vec::new(),
+        None,
+    )
+    .unwrap();
+    db.flush();
+    let revision_before = db.sync_revision().unwrap();
+
+    let report = recover_local_sync_state(&db).unwrap();
+
+    assert_eq!(report.repaired_client_seq_markers, 0);
+    assert_eq!(report.repaired_entry_states, 0);
+    assert_eq!(report.repaired_entries, 0);
+    assert_eq!(report.repaired_local_sequence_markers, 0);
+    assert_eq!(report.repaired_outbox_operations, 0);
+    assert_eq!(report.repaired_tombstones, 0);
+    assert!(report.snapshot_apply_pending.is_none());
+    assert_eq!(db.sync_revision().unwrap(), revision_before);
 }
 
 #[test]
@@ -313,9 +860,34 @@ fn sample_operation(client_id: &str, local_seq: u64, entry_uuid: &str) -> SyncOp
         mutation_ts_utc: "2026-04-26T00:00:00.000Z".to_string(),
         payload: SyncOperationPayload::entry(entry, vec!["description".to_string()]),
         checksum: String::new(),
+        auth: None,
     };
     operation.checksum = canonical_operation_checksum(&operation).unwrap();
     operation
+}
+
+fn entry_state(
+    entry_uuid: &str,
+    op_id: &str,
+    mutation_ts_utc: &str,
+    deleted: bool,
+) -> SyncEntryState {
+    SyncEntryState {
+        entry_uuid: entry_uuid.to_string(),
+        last_op_id: op_id.to_string(),
+        mutation_ts_utc: mutation_ts_utc.to_string(),
+        deleted,
+        base_version: None,
+        changed_fields: Vec::new(),
+        source_client_id: "client-state".to_string(),
+        source_local_seq: 1,
+        operation_type: if deleted {
+            SyncOperationType::InventoryEntryDelete
+        } else {
+            SyncOperationType::InventoryEntryUpdate
+        },
+        updated_at_utc: mutation_ts_utc.to_string(),
+    }
 }
 
 fn write_raw_operation(paths: &SharedSyncPaths, operation: &SyncOperationEnvelope) {

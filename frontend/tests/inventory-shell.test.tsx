@@ -158,6 +158,19 @@ describe("InventoryShell shell", () => {
     expect(screen.getByText("Could not load the ME Inventory database.")).toBeInTheDocument();
   });
 
+  it("fails closed when bridge parsing rejects a malformed desktop payload", async () => {
+    window.inventoryDesktop = createDesktopBridge({
+      loadInventory: vi.fn().mockRejectedValue(new Error("Invalid inventory entry: missing id.")),
+      syncInventory: vi.fn(),
+    });
+
+    render(<InventoryShell />);
+
+    expect(await screen.findByText("Showing all 0 entries")).toBeInTheDocument();
+    expect(screen.queryByText("Stainless socket-head cap screws")).not.toBeInTheDocument();
+    expect(screen.getByText("Could not load the ME Inventory database.")).toBeInTheDocument();
+  });
+
   it("filters desktop search locally without querying the backend per keystroke", async () => {
     const user = userEvent.setup();
     const desktopEntries = [

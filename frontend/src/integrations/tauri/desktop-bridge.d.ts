@@ -1,5 +1,6 @@
 import type {
   InventoryDeleteMutationResult,
+  ExcelExportResult,
   InventoryEntry,
   InventoryEntryEditContext,
   InventoryEntryInput,
@@ -37,11 +38,7 @@ declare global {
       openPath?: (path: string) => Promise<boolean>;
       loadPicturePreview?: (path: string) => Promise<string | null>;
       pickPicturePath?: () => Promise<string | null>;
-      exportExcel?: () => Promise<{
-        canceled: boolean;
-        error?: string;
-        outputPath?: string;
-      }>;
+      exportExcel?: () => Promise<ExcelExportResult>;
       checkForUpdate?: () => Promise<UpdateState>;
       downloadUpdate?: () => Promise<UpdateState>;
       installUpdate?: () => Promise<UpdateState>;

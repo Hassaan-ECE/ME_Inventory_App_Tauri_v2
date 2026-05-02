@@ -1,7 +1,8 @@
 {
   "name": "me-inventory",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "packageManager": "bun@1.3.13",
   "description": "Standalone ME Inventory desktop app backed by Tauri and FeOxDB.",
   "author": "Syed Hassaan Shah",
   "type": "module",
@@ -16,7 +17,11 @@
     "lint": "eslint .",
     "preview": "vite preview --config frontend/vite.config.ts",
     "tauri": "cd backend && node ../node_modules/@tauri-apps/cli/tauri.js",
-    "test": "vitest --run --config frontend/vite.config.ts"
+    "test": "vitest --run --config frontend/vite.config.ts",
+    "bun:direct": "node scripts/run-bun.mjs",
+    "audit:frontend": "node scripts/run-bun.mjs audit",
+    "audit:backend": "cd backend && cargo audit",
+    "audit:deps": "npm run audit:frontend && npm run audit:backend"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.2.8",

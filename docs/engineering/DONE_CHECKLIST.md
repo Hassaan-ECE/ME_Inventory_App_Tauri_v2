@@ -2,7 +2,7 @@
 
 Last updated: 2026-04-30
 
-Completed cleanup history, old release notes, worker logs, validation baselines, and deferred roadmap captured before the fresh `0.9.x` release-smoke reset. Current active release-smoke work lives in `docs/engineering/CLEANUP_CHECKLIST.md`.
+Historical archive of completed cleanup work, old release notes, worker logs, validation baselines, and deferred roadmap captured before the fresh `0.9.x` release-smoke reset. Commands, versions, and paths in this file are evidence from past work, not current instructions. Current release blockers live in `docs/engineering/CLEANUP_CHECKLIST.md`; current hardening status lives in `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md`.
 
 Read `docs/engineering/AGENT_RUNBOOK.md` before starting cleanup work. The runbook records command pivots, known blockers, worker rules, and troubleshooting notes. Update it whenever an agent hits a new trap or finds a better route.
 
@@ -13,16 +13,16 @@ Read `docs/engineering/AGENT_RUNBOOK.md` before starting cleanup work. The runbo
 - `[x]` done
 - `[!]` blocked or needs decision
 
-## Current Snapshot
+## Archived Snapshot
 
 - [x] README/doc consolidation is intentional.
 - [x] Frontend shell/dialog cleanup is complete.
 - [x] Frontend validation passed after integration.
 - [x] New extracted folders and coordination docs are staged with their importing files.
 - [x] Rust formatting, check, and test baselines were captured after `rustfmt` became available.
-- [!] The Bun PowerShell shim still resolves to a stale npm wrapper; keep using the direct Bun binary.
+- [!] At this checkpoint, the Bun PowerShell shim still resolved to a stale npm wrapper; the current runbook now points at `scripts\run-bun.mjs`.
 
-### Current Worktree Baseline
+### Archived Worktree Baseline
 
 ```text
 Branch: codex/cleanup-checklist-completion
@@ -38,12 +38,12 @@ Pending worktree at this checkpoint:
 - clean after final validation and closeout commit
 ```
 
-## Current Constraints
+## Archived Constraints
 
 - [x] Preserve current behavior unless the user approves a behavior change.
 - [x] Preserve existing README/doc consolidation changes.
-- [x] Keep this checklist current before work starts, after each worker finishes, after validation, and before final handoff.
-- [x] Use direct Bun binary until the PowerShell shim is fixed: `C:\Users\Syed.H.Shah\.bun\bin\bun.exe`.
+- [x] Keep this checklist updated during the archived cleanup slice.
+- [x] Use the direct Bun binary until the PowerShell shim is fixed: `C:\Users\Syed.H.Shah\.bun\bin\bun.exe`.
 - [x] `cargo fmt -- --check` now passes with `rustfmt` installed.
 - [x] Record failed attempts and pivots in `docs/engineering/AGENT_RUNBOOK.md`.
 

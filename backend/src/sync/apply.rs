@@ -19,6 +19,7 @@ use super::{
     scanning::scan_operation_files_after_watermarks,
     shared_paths::{build_shared_status, ensure_operation_log_layout, resolve_shared_root},
     snapshot::{apply_latest_snapshot_if_safe, maybe_publish_snapshot},
+    timestamps::max_timestamp_text,
     CorruptRemoteFile, CorruptRemoteReason, SharedSyncPaths, SharedSyncRunResult,
     SyncAppliedMarker, SyncOperationEnvelope, SyncOperationType, SyncTombstoneRecord,
 };
@@ -293,7 +294,8 @@ fn try_merge_concurrent_field_update(
 
     let mut merged_entry = current_entry.clone();
     apply_changed_fields(&mut merged_entry, incoming_entry, &incoming_fields);
-    merged_entry.updated_at = max_text(&current_entry.updated_at, &operation.mutation_ts_utc);
+    merged_entry.updated_at =
+        max_timestamp_text(&current_entry.updated_at, &operation.mutation_ts_utc);
     let changed = merged_entry != current_entry;
     if changed {
         db.put_entry(&merged_entry)?;
@@ -316,14 +318,6 @@ fn try_merge_concurrent_field_update(
     }
 
     Ok(Some(changed))
-}
-
-fn max_text(left: &str, right: &str) -> String {
-    if right > left {
-        right.to_string()
-    } else {
-        left.to_string()
-    }
 }
 
 fn normalized_changed_fields(fields: &[String]) -> Vec<String> {

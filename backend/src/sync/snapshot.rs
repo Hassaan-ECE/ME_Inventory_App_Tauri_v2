@@ -17,6 +17,7 @@ use crate::{
 };
 
 use super::{
+    auth,
     operation_file::{parse_operation_file_name, sha256_hex},
     queue::count_pending_local_operations,
     SharedSyncPaths, SyncEntryState, SyncTombstoneRecord, BOOTSTRAP_COMPLETE_KEY, CHECKSUM_PREFIX,
@@ -30,6 +31,7 @@ const SNAPSHOT_KEEP_COUNT: usize = 3;
 const SNAPSHOT_OP_COMPACTION_THRESHOLD: usize = 1_000;
 const SNAPSHOT_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 const MANIFEST_BACKUP_PREFIX: &str = "manifest";
+pub(crate) const SNAPSHOT_APPLY_PENDING_KEY: &str = "meta:snapshot_apply_pending";
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SnapshotApplyReport {
@@ -65,6 +67,8 @@ pub(crate) struct SharedInventorySnapshot {
     pub entry_states: Vec<SyncEntryState>,
     pub watermarks: Vec<SnapshotWatermark>,
     pub checksum: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +85,8 @@ pub(crate) struct SharedInventoryManifest {
     pub entry_count: usize,
     pub tombstone_count: usize,
     pub watermarks: Vec<SnapshotWatermark>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<String>,
 }
 
 pub(crate) fn apply_latest_snapshot_if_safe(
@@ -120,12 +126,16 @@ pub(crate) fn apply_latest_snapshot_if_safe(
         }
     };
 
+    db.put_sync_value(SNAPSHOT_APPLY_PENDING_KEY, snapshot.snapshot_id.as_bytes())?;
+    db.flush();
+
     let entries_changed = replace_from_snapshot(db, &snapshot)?;
     db.put_sync_value(BOOTSTRAP_COMPLETE_KEY, snapshot.created_at_utc.as_bytes())?;
     db.set_last_snapshot_id(&snapshot.snapshot_id)?;
     if entries_changed {
         db.increment_sync_revision()?;
     }
+    db.delete_sync_value(SNAPSHOT_APPLY_PENDING_KEY)?;
     db.flush();
 
     Ok(SnapshotApplyReport {
@@ -175,7 +185,8 @@ pub(crate) fn maybe_publish_snapshot(
         &manifest_for_snapshot(&snapshot, snapshot_file.clone()),
     )?;
 
-    let manifest = manifest_for_snapshot(&verified_snapshot, snapshot_file);
+    let mut manifest = manifest_for_snapshot(&verified_snapshot, snapshot_file);
+    sign_manifest_for_configured_trust(&mut manifest)?;
     write_manifest(paths, &manifest)?;
     db.set_last_snapshot_id(&manifest.snapshot_id)?;
 
@@ -252,8 +263,10 @@ fn build_snapshot(db: &InventoryDb) -> CommandResult<SharedInventorySnapshot> {
         entry_states,
         watermarks,
         checksum: String::new(),
+        auth: None,
     };
     snapshot.checksum = snapshot_checksum(&snapshot)?;
+    sign_snapshot_for_configured_trust(&mut snapshot)?;
     Ok(snapshot)
 }
 
@@ -285,6 +298,7 @@ fn manifest_for_snapshot(
         entry_count: snapshot.entries.len(),
         tombstone_count: snapshot.tombstones.len(),
         watermarks: snapshot.watermarks.clone(),
+        auth: None,
     }
 }
 
@@ -317,6 +331,7 @@ fn read_manifest(paths: &SharedSyncPaths) -> CommandResult<Option<SharedInventor
     let bytes = fs::read(&paths.manifest_path).map_err(db_error)?;
     let manifest: SharedInventoryManifest = serde_json::from_slice(&bytes).map_err(db_error)?;
     validate_manifest(&manifest)?;
+    verify_manifest_auth(&manifest)?;
     Ok(Some(manifest))
 }
 
@@ -370,6 +385,7 @@ fn read_verified_snapshot(
     if snapshot.checksum != manifest.snapshot_checksum || snapshot.checksum != expected_checksum {
         return Err("Snapshot checksum does not match manifest.".to_string());
     }
+    verify_snapshot_auth(&snapshot)?;
 
     Ok(snapshot)
 }
@@ -377,8 +393,48 @@ fn read_verified_snapshot(
 fn snapshot_checksum(snapshot: &SharedInventorySnapshot) -> CommandResult<String> {
     let mut canonical = snapshot.clone();
     canonical.checksum.clear();
+    canonical.auth = None;
     let bytes = serde_json::to_vec(&canonical).map_err(db_error)?;
     Ok(format!("{CHECKSUM_PREFIX}{}", sha256_hex(&bytes)))
+}
+
+fn sign_snapshot_for_configured_trust(snapshot: &mut SharedInventorySnapshot) -> CommandResult<()> {
+    snapshot.auth = None;
+    let bytes = snapshot_auth_bytes(snapshot)?;
+    snapshot.auth = auth::sign_canonical_bytes("sync.snapshot.v1", &bytes)
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn verify_snapshot_auth(snapshot: &SharedInventorySnapshot) -> CommandResult<()> {
+    let bytes = snapshot_auth_bytes(snapshot)?;
+    auth::verify_canonical_bytes("sync.snapshot.v1", &bytes, snapshot.auth.as_deref())
+}
+
+fn snapshot_auth_bytes(snapshot: &SharedInventorySnapshot) -> CommandResult<Vec<u8>> {
+    let mut canonical = snapshot.clone();
+    canonical.checksum.clear();
+    canonical.auth = None;
+    serde_json::to_vec(&canonical).map_err(db_error)
+}
+
+fn sign_manifest_for_configured_trust(manifest: &mut SharedInventoryManifest) -> CommandResult<()> {
+    manifest.auth = None;
+    let bytes = manifest_auth_bytes(manifest)?;
+    manifest.auth = auth::sign_canonical_bytes("sync.manifest.v1", &bytes)
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn verify_manifest_auth(manifest: &SharedInventoryManifest) -> CommandResult<()> {
+    let bytes = manifest_auth_bytes(manifest)?;
+    auth::verify_canonical_bytes("sync.manifest.v1", &bytes, manifest.auth.as_deref())
+}
+
+fn manifest_auth_bytes(manifest: &SharedInventoryManifest) -> CommandResult<Vec<u8>> {
+    let mut canonical = manifest.clone();
+    canonical.auth = None;
+    serde_json::to_vec(&canonical).map_err(db_error)
 }
 
 fn write_new_json_file<T: Serialize>(path: &Path, value: &T) -> CommandResult<()> {

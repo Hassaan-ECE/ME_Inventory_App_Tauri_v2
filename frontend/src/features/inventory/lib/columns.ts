@@ -11,7 +11,11 @@ export function buildDefaultColumnVisibility(): Record<ColumnKey, boolean> {
 export function mergeColumnVisibility(
   storedValue: Partial<Record<ColumnKey, boolean>> | null | undefined,
 ): Record<ColumnKey, boolean> {
-  return { ...buildDefaultColumnVisibility(), ...storedValue };
+  const visibility = { ...buildDefaultColumnVisibility(), ...storedValue };
+  if (getVisibleDataColumnCount(visibility) === 0) {
+    visibility[firstDefaultDataColumnKey()] = true;
+  }
+  return visibility;
 }
 
 export function getVisibleColumns(columnVisibility: Record<ColumnKey, boolean>): ColumnConfig[] {
@@ -26,6 +30,13 @@ export function getVisibleDataColumnCount(columnVisibility: Record<ColumnKey, bo
     }
   }
   return visibleColumns;
+}
+
+function firstDefaultDataColumnKey(): ColumnKey {
+  return (
+    INVENTORY_COLUMNS.find((column) => column.key !== "verified" && column.defaultVisible)?.key ??
+    "qty"
+  );
 }
 
 export function formatLinkLabel(link: string): string {

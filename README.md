@@ -1,18 +1,18 @@
 # ME Inventory
 
-Last consolidated: 2026-05-01
+Last consolidated: 2026-05-02
 
 ME Inventory is a Windows desktop inventory app built with Tauri 2, React 19, TypeScript, Vite, Tailwind CSS v4, Bun, Rust, and FeOxDB.
 
 Built by Syed Hassaan Shah.
 
-This README is the canonical project doc. Older planning notes, smoke logs, and architecture drafts were folded into this file so the current working state lives in one place.
+This README is the current project entry point. Detailed engineering notes live under `docs/engineering/`; release evidence and audit notes there may be historical, so prefer this file and `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md` for current handoff state.
 
 ## Current Source Truth
 
 - Active workspace: `c:\Projects\Active\ME_Inventory_App_Tauri_v2`
 - App name: `ME Inventory`
-- Display name: `ME Inventory v1.0.0`
+- Display name: `ME Inventory v1.0.1`
 - Version source: `package.json`, `backend\Cargo.toml`, and `backend\tauri.conf.json`
 - Tauri identifier: `com.me.inventory`
 - Install mode: current-user NSIS install
@@ -21,7 +21,7 @@ This README is the canonical project doc. Older planning notes, smoke logs, and 
 - Shared sync: S-drive FeOx operation logs plus manifest/snapshot bootstrap
 - Deprecated local `.db` files: quarantined once into app-data backups and never used as data sources
 
-Version note: `1.0.0` is the current source truth for the signed updater target. `0.9.9` is the expected updater baseline for installed-machine smoke.
+Version note: `1.0.1` is the current source truth for the signed updater target. `1.0.0` is the expected updater baseline for installed-machine smoke.
 
 ## Project Layout
 
@@ -31,6 +31,15 @@ backend/      Tauri/Rust app, commands, storage, sync, export, import, and nativ
 docs/         Engineering runbooks, cleanup checklists, and performance baselines
 scripts/      Smoke/manual automation scripts
 ```
+
+## Doc Map
+
+- `README.md`: current setup, runtime behavior, release checklist, and open work.
+- `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md`: active hardening status and remaining release gates.
+- `docs/engineering/SYNC_RECOVERY_INVARIANTS.md`: local sync recovery rules.
+- `docs/engineering/FEOXDB_SYNC_MIGRATION_PLAN.md`: FeOxDB shared-sync design and acceptance checklist.
+- `docs/engineering/CODE_BEHAVIOR_AUDIT.md`: historical source audit that started the hardening pass.
+- `docs/engineering/CLEANUP_CHECKLIST.md` and `DONE_CHECKLIST.md`: historical release evidence and cleanup logs.
 
 ## What Works Now
 
@@ -94,6 +103,8 @@ This is a compatibility projection for the existing ME Lab Inventory workflow. I
 - Supported picture extensions are `png`, `jpg`, `jpeg`, `webp`, `gif`, `bmp`, `tif`, and `tiff`.
 - Picture previews use a validated cache-backed app-cache copy and Tauri asset URLs.
 - Preview loading rejects missing, invalid, URL-like, unsupported-extension, and oversized source files. The current preview source limit is 50 MB.
+- UNC image paths remain allowed on Windows when they are absolute, point to a supported image file, and pass the same size and magic-byte checks as drive-letter paths.
+- Preview caching intentionally uses the selected path plus file metadata as the cache fingerprint and does not canonicalize the source path first. Windows reparse points and symlinks are handled by the operating system path lookup; the app still validates the resolved file metadata and image signature before copying into app cache.
 - The native picker saves the selected absolute picture path on the entry.
 
 ### Excel Export
@@ -142,7 +153,11 @@ This is a compatibility projection for the existing ME Lab Inventory workflow. I
 - Snapshot and manifest failures leave local FeOxDB untouched and keep the app on operation-log sync.
 - Operation files use checksums and temp-file-then-rename writes.
 - Readers ignore temp files, corrupt JSON, unknown extensions, checksum-invalid files, and identity-mismatched operation files.
+- Shared sync can require operation, snapshot, and manifest HMAC authentication by setting `ME_INVENTORY_SYNC_HMAC_KEY` to the same 16+ byte secret on every trusted client. When this variable is set, unsigned or mismatched shared files are rejected. When it is not set, the S-drive remains a trusted-write boundary enforced by Windows/share ACLs.
+- HMAC is optional hardening for the current trusted-lab release, not a replacement for share permissions. Make it required before release if IT cannot confirm that only trusted users and trusted machines can write to the shared root.
+- HMAC keys are distributed and rotated outside this repo. Put the same current key on every trusted client, wait for all clients to converge, then rotate by changing every client to the new key during the same maintenance window. Mixed-key clients fail closed against each other's new files until the rotation is complete.
 - Last-write-wins entry state uses `(mutation_ts_utc, op_id)` ordering.
+- Remote timestamps must be valid RFC3339 UTC timestamps. Old and future UTC timestamps are accepted because offline machines may reconnect later; clock skew directly affects last-write-wins ordering and should be corrected at the workstation/domain level instead of hidden in sync code.
 - Deletes create tombstones.
 - Older operations are skipped and logged as conflicts.
 - Newer upserts after a tombstone restore the entry.
@@ -150,6 +165,7 @@ This is a compatibility projection for the existing ME Lab Inventory workflow. I
 - The native watcher emits `inventory:shared-changed`; the frontend coalesces sync work so overlapping sync passes do not stack up.
 - Open clients also run a 500ms fallback sync poll so S-drive changes still land quickly when the network filesystem watcher misses a remote change.
 - The frontend status reports local readiness, shared-root availability, local-only pending state, mutation mode, revision, and last snapshot id.
+- The 1.x storage/query target is modest lab inventory scale, up to 10,000 rows per query. Larger deployments should run the ignored backend/frontend performance baselines before release and move filtering/sorting closer to indexed storage if the baseline is not acceptable.
 
 The FeOxDB operation-log path now merges concurrent non-overlapping field edits when both edits started from the same base version. Overlapping edits still use the existing last-newer-operation-wins behavior and record stale conflicts.
 
@@ -174,31 +190,38 @@ The generated updater key currently has no password. Rotate it before broad dist
 Install dependencies:
 
 ```powershell
-bun install
+node scripts\run-bun.mjs install
 ```
 
 Run the web UI:
 
 ```powershell
-bun run dev
+node scripts\run-bun.mjs run dev
 ```
 
 Run the Tauri desktop app:
 
 ```powershell
-bun run dev:desktop
+node scripts\run-bun.mjs run dev:desktop
 ```
 
 Build the frontend:
 
 ```powershell
-bun run build
+node scripts\run-bun.mjs run build
 ```
 
 Run frontend tests:
 
 ```powershell
-bun run test
+node scripts\run-bun.mjs run test
+```
+
+Run dependency audits:
+
+```powershell
+node scripts\run-bun.mjs audit
+cd backend; cargo audit
 ```
 
 Run the one-machine shared-sync smoke:
@@ -210,7 +233,7 @@ powershell -ExecutionPolicy Bypass -File scripts\smoke-sync-one-machine.ps1
 Build the Windows NSIS installer:
 
 ```powershell
-bun run build:desktop
+node scripts\run-bun.mjs run build:desktop
 ```
 
 Installer output:
@@ -243,56 +266,66 @@ The React bridge calls these commands:
 
 Before building a release candidate:
 
-The global Bun PowerShell shim can resolve to a stale wrapper on this workstation. Use the direct Bun binary for release validation until the shim is fixed:
+The global Bun PowerShell shim can resolve to a stale wrapper on this workstation. Use the repo Bun launcher for release validation until the shim is fixed:
 
 ```powershell
-& "$env:USERPROFILE\.bun\bin\bun.exe" run lint
-& "$env:USERPROFILE\.bun\bin\bun.exe" run test
-& "$env:USERPROFILE\.bun\bin\bun.exe" run build
+node scripts\run-bun.mjs run lint
+node scripts\run-bun.mjs run test
+node scripts\run-bun.mjs run build
+node scripts\run-bun.mjs audit
 
 Push-Location backend
 cargo fmt -- --check
 cargo check
 cargo test
+cargo audit
 Pop-Location
 ```
 
-For signed updater releases, build with the updater private key available outside the repo. The fresh `0.9.x` smoke line rotated the updater key at `%USERPROFILE%\.tauri\me-inventory-updater.key`; keep that private key out of the repo.
+`cargo audit` requires `cargo install cargo-audit`. Clippy is also a release gate once installed with `rustup component add clippy`:
+
+```powershell
+Push-Location backend
+cargo clippy --all-targets -- -D warnings
+Pop-Location
+```
+
+For signed updater releases, build with the updater private key available outside the repo. The current local key path is `%USERPROFILE%\.tauri\me-inventory-updater.key`; keep that private key out of the repo.
 
 ```powershell
 $env:PATH = "$env:USERPROFILE\.bun\bin;$env:PATH"
 $env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content -LiteralPath "$env:USERPROFILE\.tauri\me-inventory-updater.key" -Raw).Trim()
 $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
-& "$env:USERPROFILE\.bun\bin\bun.exe" run build:desktop
+node scripts\run-bun.mjs run build:desktop
 Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY
 Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ```
 
-Fresh shared-release staging uses `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases`. Before restarting at `0.9.0`, archive existing release folders into `backups\old-releases-YYYYMMDD-HHMMSS\` and back up root `current.json` as `backups\current-before-fresh-0.9.0-YYYYMMDD-HHMMSS.json`.
+Shared-release staging uses `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases`. Before replacing release artifacts, back up any current shared metadata or installer folders that are still needed for rollback evidence.
 
-Publish the generated `0.9.1` NSIS installer, its `.sig` file, SHA-256 sums, and a GitHub Release asset named `latest.json`. The GitHub CLI is not installed on this workstation, so upload the staged files manually to a non-draft, non-prerelease GitHub Release tagged `v0.9.1`. Static updater metadata must include the Tauri updater fields for the Windows platform:
+Publish the generated NSIS installer, its `.sig` file, SHA-256 sums, and a GitHub Release asset named `latest.json`. If `gh` is unavailable on the workstation, upload the staged files manually to a non-draft, non-prerelease GitHub Release. Static updater metadata must include the Tauri updater fields for the Windows platform:
 
 ```json
 {
-  "version": "0.9.1",
+  "version": "1.0.1",
   "notes": "Release notes",
-  "pub_date": "2026-04-30T00:00:00Z",
+  "pub_date": "2026-05-02T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "contents of the generated .sig file",
-      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v0.9.1/ME%20Inventory_0.9.1_x64-setup.exe"
+      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v1.0.1/ME%20Inventory_1.0.1_x64-setup.exe"
     }
   }
 }
 ```
 
-Fresh `1.0.0` manual smoke:
+Fresh `1.0.1` manual smoke:
 
 - Confirm `package.json`, `backend\Cargo.toml`, and `backend\tauri.conf.json` versions match.
 - Confirm the app identifier is still `com.me.inventory`.
-- Update an installed `0.9.9` machine to `1.0.0`.
+- Update an installed `1.0.0` machine to `1.0.1`.
 - Launch from the installed shortcut.
-- Confirm the visible name and version are `ME Inventory v1.0.0`.
+- Confirm the visible name and version are `ME Inventory v1.0.1`.
 - On clean app data, confirm startup hydrates from the S-drive FeOx snapshot and newer operation files.
 - Close and reopen, then confirm row count stays stable.
 - Add, edit, verify, archive, restore, and delete a disposable smoke entry.
@@ -302,7 +335,7 @@ Fresh `1.0.0` manual smoke:
 - Confirm a missing picture path shows the missing state without crashing.
 - Export Excel, cancel once, then save once to a path with spaces.
 - Open the workbook and confirm exactly `Inventory` and `Archive` sheets.
-- Upload the staged `1.0.0` GitHub Release assets, then from the installed `0.9.9` app confirm update check, download progress, install, and relaunch/update behavior.
+- Upload the staged `1.0.1` GitHub Release assets, then from the installed `1.0.0` app confirm update check, download progress, install, and relaunch/update behavior.
 - Run a real shared-drive multi-machine smoke and confirm create/update/delete convergence plus stale-update conflict logging.
 - Confirm known old app-owned `.db` files are moved to `deprecated-db-backups` and are not loaded.
 - Record installer path, updater `.sig` path, GitHub release URL, SHA-256, commit, source version, tester, machines, result, and date.
@@ -340,7 +373,7 @@ Manual exercise:
 
 ## Open Work
 
-- Run real shared-drive multi-machine `1.0.0` update smoke from installed `0.9.9`.
+- Run real shared-drive multi-machine `1.0.1` update smoke from installed `1.0.0`.
 - Add conflict UI, locked-file smoke, and shared media storage.
 - Decide whether entries should move from the current compatibility projection to future `inventory:item:*` and ledger keyspaces.
 - Benchmark real inventory size for search, sort, startup, sync, and table rendering.

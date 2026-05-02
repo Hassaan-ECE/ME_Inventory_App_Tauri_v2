@@ -3,15 +3,21 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 
 import { APP_VERSION } from "@/app/branding";
-import type { InventorySyncResult } from "@/integrations/tauri/desktop-bridge";
+import {
+  parseBoolean,
+  parseDeleteMutationResult,
+  parseEntryMutationResult,
+  parseExcelExportResult,
+  parseInventoryQueryResult,
+  parseInventorySyncResult,
+  parseNullableString,
+  parseUpdateState,
+} from "@/integrations/tauri/bridgeGuards";
 import { installWindowStatePersistence, saveCurrentWindowState } from "@/integrations/tauri/windowState";
 import type {
-  InventoryDeleteMutationResult,
   InventoryEntryEditContext,
   InventoryEntryInput,
-  InventoryEntryMutationResult,
   InventoryQueryInput,
-  InventoryQueryResult,
   UpdateState,
 } from "@/features/inventory/types";
 
@@ -23,39 +29,40 @@ if (typeof window !== "undefined" && isTauri()) {
   installWindowStatePersistence();
   window.inventoryDesktop = {
     isDesktop: true,
-    loadInventory: () => invoke<InventorySyncResult>("load_inventory"),
+    loadInventory: () => invoke("load_inventory").then(parseInventorySyncResult),
     queryInventory: (input: InventoryQueryInput) =>
-      invoke<InventoryQueryResult>("query_inventory", { input }),
-    syncInventory: () => invoke<InventorySyncResult>("sync_inventory"),
+      invoke("query_inventory", { input }).then(parseInventoryQueryResult),
+    syncInventory: () => invoke("sync_inventory").then(parseInventorySyncResult),
     toggleVerifiedEntry: (entryId: string, nextVerified: boolean) =>
-      invoke<InventoryEntryMutationResult>("toggle_verified_entry", {
+      invoke("toggle_verified_entry", {
         entryId,
         nextVerified,
-      }),
+      }).then(parseEntryMutationResult),
     createEntry: (input: InventoryEntryInput) =>
-      invoke<InventoryEntryMutationResult>("create_entry", { input }),
+      invoke("create_entry", { input }).then(parseEntryMutationResult),
     updateEntry: (entryId: string, input: InventoryEntryInput, editContext?: InventoryEntryEditContext) =>
-      invoke<InventoryEntryMutationResult>("update_entry", { editContext, entryId, input }),
+      invoke("update_entry", { editContext, entryId, input }).then(parseEntryMutationResult),
     setArchivedEntry: (entryId: string, archived: boolean) =>
-      invoke<InventoryEntryMutationResult>("set_archived_entry", {
+      invoke("set_archived_entry", {
         entryId,
         archived,
-      }),
+      }).then(parseEntryMutationResult),
     deleteEntry: (entryId: string) =>
-      invoke<InventoryDeleteMutationResult>("delete_entry", { entryId }),
-    openExternal: async (url: string) => invoke<boolean>("open_external", { url }),
-    openPath: async (path: string) => invoke<boolean>("open_path", { path }),
+      invoke("delete_entry", { entryId }).then(parseDeleteMutationResult),
+    openExternal: async (url: string) =>
+      invoke("open_external", { url }).then((value) => parseBoolean(value, "open_external result")),
+    openPath: async (path: string) =>
+      invoke("open_path", { path }).then((value) => parseBoolean(value, "open_path result")),
     loadPicturePreview: async (path: string) => {
-      const previewPath = await invoke<string | null>("load_picture_preview", { path });
+      const previewPath = await invoke("load_picture_preview", { path }).then((value) =>
+        parseNullableString(value, "picture preview path"),
+      );
       return previewPath ? convertFileSrc(previewPath) : null;
     },
-    pickPicturePath: () => invoke<string | null>("pick_picture_path"),
+    pickPicturePath: () =>
+      invoke("pick_picture_path").then((value) => parseNullableString(value, "picked picture path")),
     exportExcel: () =>
-      invoke<{
-        canceled: boolean;
-        error?: string;
-        outputPath?: string;
-      }>("export_excel"),
+      invoke("export_excel").then(parseExcelExportResult),
     checkForUpdate,
     downloadUpdate,
     installUpdate,
@@ -199,11 +206,12 @@ function listenToSharedInventoryChanged(callback: () => void): () => void {
 }
 
 function publishUpdateState(state: UpdateState): UpdateState {
-  pendingUpdateState = state;
+  const normalizedState = parseUpdateState(state);
+  pendingUpdateState = normalizedState;
   for (const listener of updateStateListeners) {
-    listener(state);
+    listener(normalizedState);
   }
-  return state;
+  return normalizedState;
 }
 
 function updateStateFromUpdate(

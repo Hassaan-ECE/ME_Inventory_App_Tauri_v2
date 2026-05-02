@@ -1,19 +1,19 @@
 # Agent Runbook
 
-Last updated: 2026-04-29
+Last updated: 2026-05-02
 
-Use this file before starting cleanup work in this repo. It records project-specific traps, pivots that worked, and fixes still worth doing.
+Use this file before release or cleanup work in this repo. It records project-specific traps, pivots that worked, and fixes still worth doing.
 
 ## Agent Rules
 
 - Run `git status --short` before editing.
-- Preserve the README/doc consolidation unless the user asks to change it.
+- Treat `README.md` as the current entry point and use dated engineering docs as historical evidence unless they explicitly say they are active.
 - Preserve user-authored changes. Do not revert files outside your assigned scope.
 - Keep importing files and extracted folders together. If `InventoryShell.tsx` imports `frontend/src/features/inventory/components/shell/*`, that folder must be included when staging or committing.
 - Use GPT-5.5 xhigh workers for independent cleanup slices when the user asks for worker support.
 - Give each worker strict file ownership before it starts.
 - The manager owns checklist updates, integration, validation, and final review.
-- Record any failed command, blocker, or pivot in this runbook before handing off.
+- Record durable release blockers or repeatable pivots here before handing off. One-off command failures can stay in the final handoff.
 
 ## Known Hiccups And Pivots
 
@@ -31,12 +31,12 @@ where.exe bun
 - Working pivot:
 
 ```powershell
-& "$env:USERPROFILE\.bun\bin\bun.exe" run <script>
+node scripts\run-bun.mjs run <script>
 ```
 
 - Known good version from this workspace: `1.3.13`.
 - Proper fix later: repair PATH, remove the stale npm shim, or reinstall Bun so `bun` resolves to `C:\Users\Syed.H.Shah\.bun\bin\bun.exe`.
-- Until fixed, use the direct Bun binary in validation commands.
+- Until fixed, use `scripts\run-bun.mjs`; it resolves the real Bun binary or `BUN_EXE`.
 
 ### Missing Rustfmt
 
@@ -85,17 +85,13 @@ rustup component add rustfmt
 ### GitHub Release Upload
 
 - `gh` is not installed on this workstation as of 2026-04-30.
-- For the fresh `0.9.1` updater smoke, stage installer, `.sig`, SHA-256 sums, and `latest.json` locally under ignored `release\v0.9.1\`.
-- Upload those assets manually to a non-draft, non-prerelease GitHub Release tagged `v0.9.1`, then validate the app updater against the real GitHub metadata URL.
+- Stage installer, `.sig`, SHA-256 sums, and `latest.json` locally under an ignored `release\vX.Y.Z\` folder.
+- Upload those assets manually to a non-draft, non-prerelease GitHub Release tagged `vX.Y.Z`, then validate the app updater against the real GitHub metadata URL.
 
-### Untracked Extracted Folders
+### Untracked Source Files
 
-- Symptom: imports pass locally, but new extracted module folders show as `??` in `git status --short`.
-- Current folders to include when staging:
-  - `docs/engineering/CLEANUP_CHECKLIST.md`
-  - `docs/engineering/AGENT_RUNBOOK.md`
-  - `frontend/src/features/inventory/components/shell/`
-  - `frontend/src/features/inventory/components/entry-dialog/`
+- Symptom: imports pass locally, but new source files show as `??` in `git status --short`.
+- Current audit-remediation files to include when staging include `backend/src/runtime/shared_sync.rs`, `backend/src/sync/auth.rs`, `backend/src/sync/recovery.rs`, `backend/src/sync/timestamps.rs`, `frontend/src/integrations/tauri/bridgeGuards.ts`, `frontend/tests/columns.test.ts`, `frontend/tsconfig.tests.json`, and `scripts/run-bun.mjs`.
 - Proper fix: never commit an importing file without the new module files it imports.
 
 ### Worker Fork Model Override
@@ -108,13 +104,13 @@ rustup component add rustfmt
 
 ### Frontend
 
-Use the direct Bun binary until the shim is fixed:
+Use the repo launcher until the shim is fixed:
 
 ```powershell
-& "$env:USERPROFILE\.bun\bin\bun.exe" run lint
-& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- frontend/tests/inventory-shell.test.tsx frontend/tests/entry-dialog.test.tsx
-& "$env:USERPROFILE\.bun\bin\bun.exe" run test
-& "$env:USERPROFILE\.bun\bin\bun.exe" run build
+node scripts\run-bun.mjs run lint
+node scripts\run-bun.mjs run test
+node scripts\run-bun.mjs run build
+node scripts\run-bun.mjs audit
 ```
 
 ### Git
@@ -126,10 +122,7 @@ git status --short
 
 ### Rust
 
-`rustfmt` is installed. Current baseline from 2026-04-28:
-- `cargo fmt -- --check`: pass, about 0.73s.
-- `cargo check`: pass, about 13.54s.
-- `cargo test`: pass, about 182.76s; the old `updater_scaffold` warning was removed when the custom updater scaffold was replaced by the signed Tauri updater.
+`rustfmt` is installed. Clippy and `cargo-audit` still need local installation before they can be release gates on this workstation.
 
 Run:
 
@@ -138,6 +131,8 @@ Push-Location backend
 cargo fmt -- --check
 cargo check
 cargo test
+cargo clippy --all-targets -- -D warnings
+cargo audit
 Pop-Location
 ```
 

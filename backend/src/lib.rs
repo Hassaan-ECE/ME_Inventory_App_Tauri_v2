@@ -8,7 +8,7 @@ mod sync;
 pub(crate) use api::commands;
 pub(crate) use domain::{model, query};
 pub(crate) use integrations::{deprecated_db_cleanup, export, native};
-pub(crate) use runtime::shared_watcher;
+pub(crate) use runtime::{shared_sync, shared_watcher};
 pub(crate) use storage as store;
 
 use tauri::{Manager, RunEvent};
@@ -22,7 +22,9 @@ pub fn run() {
         .setup(|app| {
             let db = store::InventoryDb::open(app.handle())?;
             let _ = deprecated_db_cleanup::quarantine_deprecated_databases_once(app.handle(), &db);
+            sync::recover_local_sync_state(&db)?;
             app.manage(db);
+            app.manage(shared_sync::SharedSyncCoordinator::new());
             app.manage(shared_watcher::SharedSyncWatcher::new());
             Ok(())
         })

@@ -399,4 +399,9 @@ impl InventoryDb {
         keys::validate_sync_key(key)?;
         self.put_bytes(key.as_bytes(), value)
     }
+
+    pub(crate) fn delete_sync_value(&self, key: &str) -> CommandResult<()> {
+        keys::validate_sync_key(key)?;
+        self.delete_key(key.as_bytes())
+    }
 }

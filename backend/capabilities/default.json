@@ -4,10 +4,18 @@
   "description": "Capability for the main inventory window",
   "windows": ["main"],
   "permissions": [
-    "core:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-available-monitors",
+    "core:window:allow-is-maximized",
+    "core:window:allow-is-minimized",
+    "core:window:allow-maximize",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
     "core:window:allow-set-size",
     "core:window:allow-set-position",
-    "core:window:allow-maximize",
-    "updater:default"
+    "updater:allow-check",
+    "updater:allow-download",
+    "updater:allow-install"
   ]
 }

@@ -184,6 +184,30 @@ mod tests {
         let _ = fs::remove_file(path);
     }
 
+    #[test]
+    fn inventory_sheet_writes_formula_like_user_text_as_strings() {
+        let path = temp_xlsx_path("formula-like-text");
+        let mut entry = test_entry("7", false, false, Some(1.0));
+        entry.manufacturer = "+SUM(1,2)".to_string();
+        entry.model = "-10+20".to_string();
+        entry.description = "=2+3".to_string();
+        entry.notes = "@username".to_string();
+
+        write_inventory_workbook(&[entry], &path).unwrap();
+
+        let worksheet_xml = read_xlsx_member(&path, "xl/worksheets/sheet1.xml");
+        assert!(!worksheet_xml.contains("<f>"));
+        assert!(!worksheet_xml.contains("<f "));
+
+        let shared_strings = shared_strings(&path);
+        assert!(shared_strings.contains(&"+SUM(1,2)".to_string()));
+        assert!(shared_strings.contains(&"-10+20".to_string()));
+        assert!(shared_strings.contains(&"=2+3".to_string()));
+        assert!(shared_strings.contains(&"@username".to_string()));
+
+        let _ = fs::remove_file(path);
+    }
+
     fn test_entry(id: &str, archived: bool, verified: bool, qty: Option<f64>) -> InventoryEntry {
         InventoryEntry {
             id: id.to_string(),

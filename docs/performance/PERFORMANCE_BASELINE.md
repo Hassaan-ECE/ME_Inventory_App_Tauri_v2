@@ -2,6 +2,8 @@
 
 Captured: 2026-05-01 for the FeOxDB-only `1.0.0` cleanup
 
+Historical note: these numbers describe the last recorded baseline. Rerun the ignored backend and frontend performance baselines before treating them as release evidence for a new candidate.
+
 ## Commands
 
 ```powershell
@@ -11,7 +13,7 @@ Pop-Location
 
 $env:RUN_PERF_BASELINE = "1"
 $env:PERF_BASELINE_JSON = ".tmp\performance-baseline-frontend.json"
-& "$env:USERPROFILE\.bun\bin\bun.exe" run test -- frontend/tests/performance-baseline.test.tsx
+node scripts\run-bun.mjs run test -- frontend/tests/performance-baseline.test.tsx
 ```
 
 Generated JSON output stays under `.tmp/` and is not committed.

@@ -94,6 +94,12 @@ export interface InventoryDeleteMutationResult {
   shared?: InventorySharedStatus;
 }
 
+export interface ExcelExportResult {
+  canceled: boolean;
+  error?: string;
+  outputPath?: string;
+}
+
 export type UpdateStatus =
   | "idle"
   | "checking"

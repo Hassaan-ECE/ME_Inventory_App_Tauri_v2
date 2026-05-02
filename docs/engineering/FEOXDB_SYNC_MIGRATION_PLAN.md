@@ -1,6 +1,8 @@
-# FeOxDB Shared Sync Plan
+# FeOxDB Shared Sync Notes
 
-Last updated: 2026-05-01
+Last updated: 2026-05-02
+
+Status: implemented as the current `1.0.0` storage/sync design. Keep this file as the compact design note; use `CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md` for hardening status and release gates.
 
 ## Current Shape
 
@@ -47,7 +49,7 @@ Result:
 - no duplicate row is created
 - overlapping edits still use newer-operation-wins behavior and record a stale conflict
 
-## Release Acceptance
+## Release Acceptance Still To Run
 
 Before treating `1.0.0` as shipped:
 

@@ -211,6 +211,74 @@ fn two_databases_push_and_pull_create_update_and_delete() {
 }
 
 #[test]
+fn hmac_two_databases_push_and_pull_signed_operations() {
+    let _hmac = sync::set_test_hmac_key(Some("0123456789abcdef"));
+    let db_a = test_db("sync-hmac-db-a");
+    let db_b = test_db("sync-hmac-db-b");
+    let shared_root = existing_shared_root("sync-hmac-two-db-root");
+
+    run_shared_sync_with_root(&db_a, &shared_root).unwrap();
+    run_shared_sync_with_root(&db_b, &shared_root).unwrap();
+
+    let entry = sample_entry("1", "entry-hmac-shared", "Created with HMAC");
+    db_a.put_entry(&entry).unwrap();
+    db_a.set_next_entry_id(2).unwrap();
+    sync::queue_entry_operation(
+        &db_a,
+        SyncOperationType::InventoryEntryCreate,
+        entry,
+        Vec::new(),
+        None,
+    )
+    .unwrap();
+    db_a.flush();
+
+    run_shared_sync_with_root(&db_a, &shared_root).unwrap();
+    let pulled_create = run_shared_sync_with_root(&db_b, &shared_root).unwrap();
+
+    assert!(pulled_create.entries_changed);
+    assert_eq!(
+        db_b.find_entry("entry-hmac-shared")
+            .unwrap()
+            .unwrap()
+            .description,
+        "Created with HMAC"
+    );
+}
+
+#[test]
+fn hmac_signed_manifest_and_snapshot_apply_successfully() {
+    let _hmac = sync::set_test_hmac_key(Some("0123456789abcdef"));
+    let db_source = test_db("sync-hmac-snapshot-source");
+    let db_target = test_db("sync-hmac-snapshot-target");
+    let shared_root = existing_shared_root("sync-hmac-snapshot-root");
+    let entry = sample_entry("1", "entry-hmac-snapshot", "Signed snapshot");
+    db_source.put_entry(&entry).unwrap();
+    db_source.set_next_entry_id(2).unwrap();
+    db_source.flush();
+
+    run_shared_sync_with_root(&db_source, &shared_root).unwrap();
+    let result = run_shared_sync_with_root(&db_target, &shared_root).unwrap();
+
+    assert!(result.entries_changed);
+    assert_eq!(
+        db_target
+            .find_entry("entry-hmac-snapshot")
+            .unwrap()
+            .unwrap()
+            .description,
+        "Signed snapshot"
+    );
+}
+
+#[test]
+fn hmac_rejects_unsigned_manifest_unsigned_snapshot_and_tampered_snapshot() {
+    assert_hmac_snapshot_rejection("unsigned-manifest", remove_manifest_auth);
+    assert_hmac_snapshot_rejection("unsigned-snapshot", remove_first_snapshot_auth);
+    assert_hmac_snapshot_rejection("tampered-snapshot", tamper_first_snapshot_description);
+}
+
+#[test]
 fn repeated_pull_ignores_already_applied_operation() {
     let db_source = test_db("sync-idempotent-source");
     let db_target = test_db("sync-idempotent-target");
@@ -539,6 +607,59 @@ fn snapshot_file_count(shared_root: &PathBuf) -> usize {
                 .ends_with(".snapshot.json")
         })
         .count()
+}
+
+fn assert_hmac_snapshot_rejection(scenario: &str, corrupt_shared_snapshot: impl FnOnce(&PathBuf)) {
+    let _hmac = sync::set_test_hmac_key(Some("0123456789abcdef"));
+    let db_source = test_db(&format!("sync-hmac-{scenario}-source"));
+    let db_target = test_db(&format!("sync-hmac-{scenario}-target"));
+    let shared_root = existing_shared_root(&format!("sync-hmac-{scenario}-root"));
+    let entry = sample_entry("1", &format!("entry-hmac-{scenario}"), "Rejected snapshot");
+    db_source.put_entry(&entry).unwrap();
+    db_source.set_next_entry_id(2).unwrap();
+    db_source.flush();
+
+    run_shared_sync_with_root(&db_source, &shared_root).unwrap();
+    corrupt_shared_snapshot(&shared_root);
+
+    let result = run_shared_sync_with_root(&db_target, &shared_root).unwrap();
+
+    assert!(!result.entries_changed);
+    assert!(result.shared.message.contains("corrupt"));
+    assert!(db_target.find_entry(&entry.entry_uuid).unwrap().is_none());
+}
+
+fn remove_manifest_auth(shared_root: &PathBuf) {
+    remove_json_field(&manifest_path(shared_root), "auth");
+}
+
+fn remove_first_snapshot_auth(shared_root: &PathBuf) {
+    remove_json_field(&first_snapshot_path(shared_root), "auth");
+}
+
+fn tamper_first_snapshot_description(shared_root: &PathBuf) {
+    let path = first_snapshot_path(shared_root);
+    let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    value["entries"][0]["description"] = serde_json::Value::String("Tampered snapshot".to_string());
+    fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+}
+
+fn remove_json_field(path: &PathBuf, field: &str) {
+    let mut value: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    value.as_object_mut().unwrap().remove(field);
+    fs::write(path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+}
+
+fn first_snapshot_path(shared_root: &PathBuf) -> PathBuf {
+    let snapshots_dir = shared_root
+        .join("shared")
+        .join("inventory")
+        .join("snapshots");
+    fs::read_dir(snapshots_dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.extension().and_then(|extension| extension.to_str()) == Some("json"))
+        .expect("snapshot file should exist")
 }
 
 fn test_db(prefix: &str) -> InventoryDb {

@@ -5,6 +5,7 @@ use crate::{
 
 use super::{
     operation_file::{operation_file_path, sha256_hex},
+    timestamps::compare_timestamp_text,
     CorruptRemoteFile, CorruptRemoteReason, SharedSyncPaths, SyncConflictReason,
     SyncConflictRecord, SyncEntryState, SyncOperationEnvelope, SyncOperationType,
     SyncTombstoneRecord,
@@ -79,9 +80,10 @@ pub(super) fn operation_wins_state(
     operation: &SyncOperationEnvelope,
     state: &SyncEntryState,
 ) -> bool {
-    operation.mutation_ts_utc.as_str() > state.mutation_ts_utc.as_str()
-        || (operation.mutation_ts_utc == state.mutation_ts_utc
-            && operation.op_id.as_str() > state.last_op_id.as_str())
+    let timestamp_order =
+        compare_timestamp_text(&operation.mutation_ts_utc, &state.mutation_ts_utc);
+    timestamp_order.is_gt()
+        || (timestamp_order.is_eq() && operation.op_id.as_str() > state.last_op_id.as_str())
 }
 
 pub(super) fn record_entry_state_for_operation(

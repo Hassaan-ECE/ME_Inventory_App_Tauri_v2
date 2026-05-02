@@ -21,6 +21,13 @@ export interface StoredWindowState {
   y: number;
 }
 
+interface MonitorWorkArea {
+  workArea: {
+    position: { x: number; y: number };
+    size: { height: number; width: number };
+  };
+}
+
 let installed = false;
 let saveTimer: number | null = null;
 
@@ -76,7 +83,7 @@ export function parseStoredWindowState(rawState: string | null): StoredWindowSta
 
 export function isWindowStateVisibleOnAnyMonitor(
   state: Pick<StoredWindowState, "height" | "width" | "x" | "y">,
-  monitors: Pick<Monitor, "workArea">[],
+  monitors: MonitorWorkArea[],
 ): boolean {
   if (monitors.length === 0) {
     return true;

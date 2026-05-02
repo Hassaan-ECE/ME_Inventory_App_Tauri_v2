@@ -177,6 +177,47 @@ fn newer_remote_update_overwrites_older_local_state() {
 }
 
 #[test]
+fn newer_remote_update_with_fractional_timestamp_wins_over_whole_second_local_state() {
+    let db = test_db("sync-lww-parsed-timestamp-target");
+    let shared_root = existing_shared_root("sync-lww-parsed-timestamp-root");
+    let mut local_entry = sample_entry("1", "entry-lww-parsed-timestamp", "Whole second local");
+    local_entry.updated_at = "2026-04-26T13:00:00Z".to_string();
+    db.put_entry(&local_entry).unwrap();
+    db.put_sync_value("meta:sync_bootstrap_complete", b"test")
+        .unwrap();
+    db.put_sync_entry_state(
+        &local_entry.entry_uuid,
+        &entry_state_for_test(&local_entry, "op-local-whole-second", false),
+    )
+    .unwrap();
+    db.flush();
+
+    let mut remote_entry = local_entry.clone();
+    remote_entry.description = "Fractional remote".to_string();
+    remote_entry.updated_at = "2026-04-26T13:00:00.001Z".to_string();
+    let remote_operation = remote_upsert_operation(
+        "remote-parsed-timestamp-client",
+        1,
+        "op-remote-fractional",
+        "2026-04-26T13:00:00.001Z",
+        remote_entry,
+    );
+    write_remote_operation(&shared_root, &remote_operation);
+
+    let result = run_shared_sync_with_root(&db, &shared_root).unwrap();
+
+    assert!(result.entries_changed);
+    assert_eq!(
+        db.find_entry("entry-lww-parsed-timestamp")
+            .unwrap()
+            .unwrap()
+            .description,
+        "Fractional remote"
+    );
+    assert_eq!(conflict_count(&db), 0);
+}
+
+#[test]
 fn older_remote_update_is_skipped_and_logged_as_conflict() {
     let db = test_db("sync-lww-older-target");
     let shared_root = existing_shared_root("sync-lww-older-root");

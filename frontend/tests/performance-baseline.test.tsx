@@ -34,7 +34,7 @@ type Metric = DurationMetric | MemoryMetric;
 
 describe.runIf(process.env.RUN_PERF_BASELINE === "1")("frontend performance baseline", () => {
   it("measures local filtering and virtualized table behavior", async () => {
-    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     const datasets = [
       { entries: MOCK_INVENTORY, name: "current" },
       { entries: syntheticEntries(1_000), name: "synthetic_1000" },

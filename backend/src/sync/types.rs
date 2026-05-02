@@ -164,6 +164,8 @@ pub(crate) struct SyncOperationEnvelope {
     pub payload: SyncOperationPayload,
     #[serde(default)]
     pub checksum: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]

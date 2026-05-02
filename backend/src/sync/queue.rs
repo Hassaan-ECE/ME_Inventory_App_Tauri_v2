@@ -13,7 +13,7 @@ use super::{
     identity::local_identity_without_flush,
     operation_file::{
         canonical_operation_checksum, operation_file_path, read_operation_file_for_identity,
-        write_operation_file,
+        sign_operation_for_configured_trust, write_operation_file,
     },
     SharedSyncPaths, SyncClientIdentity, SyncCoreErrorKind, SyncCoreResult, SyncOperationEnvelope,
     SyncOperationPayload, SyncOperationType, SyncTombstoneRecord, BOOTSTRAP_COMPLETE_KEY,
@@ -49,9 +49,11 @@ pub(crate) fn build_entry_operation(
         mutation_ts_utc: mutation_ts,
         payload: SyncOperationPayload::entry(entry, changed_fields),
         checksum: String::new(),
+        auth: None,
     };
 
     operation.checksum = canonical_operation_checksum(&operation)?;
+    sign_operation_for_configured_trust(&mut operation)?;
     Ok(operation)
 }
 
@@ -79,9 +81,11 @@ pub(crate) fn build_delete_operation(
         mutation_ts_utc: deleted_at_utc.clone(),
         payload: SyncOperationPayload::delete(entry_uuid, deleted_at_utc),
         checksum: String::new(),
+        auth: None,
     };
 
     operation.checksum = canonical_operation_checksum(&operation)?;
+    sign_operation_for_configured_trust(&mut operation)?;
     Ok(operation)
 }
 

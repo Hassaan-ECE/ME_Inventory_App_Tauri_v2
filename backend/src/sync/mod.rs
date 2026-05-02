@@ -1,18 +1,23 @@
 #![allow(dead_code, unused_imports)]
 
 mod apply;
+mod auth;
 mod conflicts;
 mod identity;
 mod operation_file;
 mod queue;
+mod recovery;
 mod scanning;
 mod shared_paths;
 mod snapshot;
+mod timestamps;
 mod types;
 
 pub(crate) use self::apply::{
     publish_pending_local_changes, run_shared_sync, run_shared_sync_with_root,
 };
+#[cfg(test)]
+pub(crate) use self::auth::set_test_hmac_key;
 pub(crate) use self::conflicts::{
     corrupt_remote_record_id, record_corrupt_remote_file, record_corrupt_remote_files,
 };
@@ -27,6 +32,7 @@ pub(crate) use self::operation_file::{
 pub(crate) use self::queue::{
     build_delete_operation, build_entry_operation, queue_delete_operation, queue_entry_operation,
 };
+pub(crate) use self::recovery::{last_local_recovery_message, recover_local_sync_state};
 pub(crate) use self::scanning::{scan_operation_files, scan_operation_files_after_watermarks};
 pub(crate) use self::shared_paths::{
     ensure_operation_log_layout, queued_local_status, resolve_shared_root,
@@ -36,6 +42,7 @@ pub(crate) use self::shared_paths::{
 pub(crate) use self::snapshot::{
     apply_latest_snapshot_if_safe, maybe_publish_snapshot, SharedInventoryManifest,
     SharedInventorySnapshot, SnapshotApplyReport, SnapshotPublishReport, SnapshotWatermark,
+    SNAPSHOT_APPLY_PENDING_KEY,
 };
 pub(crate) use self::types::{
     CorruptRemoteFile, CorruptRemoteReason, OperationScanReport, SharedSyncPaths,

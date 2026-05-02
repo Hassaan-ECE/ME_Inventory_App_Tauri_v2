@@ -1,8 +1,19 @@
+use std::path::Path;
+
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
+use url::Url;
 use uuid::Uuid;
 
 pub(crate) const MAX_QUERY_LIMIT: usize = 10_000;
+const MAX_QUANTITY: f64 = 1_000_000.0;
+const STANDARD_TEXT_LIMIT: usize = 512;
+const LONG_TEXT_LIMIT: usize = 4_000;
+const NOTES_TEXT_LIMIT: usize = 8_000;
+const PATH_TEXT_LIMIT: usize = 2_048;
+const IMAGE_PATH_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"];
+const LINK_PROTOCOLS: &[&str] = &["http", "https", "mailto"];
+const PICTURE_URL_PROTOCOLS: &[&str] = &["http", "https"];
 pub(crate) type CommandResult<T> = Result<T, String>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -258,6 +269,31 @@ pub(crate) fn validate_entry_input(input: &InventoryEntryInput) -> CommandResult
         );
     }
 
+    if let Some(qty) = input.qty {
+        if !qty.is_finite() || !(0.0..=MAX_QUANTITY).contains(&qty) {
+            return Err(format!(
+                "Quantity must be a number between 0 and {MAX_QUANTITY}."
+            ));
+        }
+    }
+
+    validate_text_length("Asset number", &input.asset_number, STANDARD_TEXT_LIMIT)?;
+    validate_text_length("Serial number", &input.serial_number, STANDARD_TEXT_LIMIT)?;
+    validate_text_length("Manufacturer", &input.manufacturer, STANDARD_TEXT_LIMIT)?;
+    validate_text_length("Model", &input.model, STANDARD_TEXT_LIMIT)?;
+    validate_text_length("Description", &input.description, LONG_TEXT_LIMIT)?;
+    validate_text_length("Project name", &input.project_name, STANDARD_TEXT_LIMIT)?;
+    validate_text_length("Location", &input.location, STANDARD_TEXT_LIMIT)?;
+    validate_text_length("Assigned to", &input.assigned_to, STANDARD_TEXT_LIMIT)?;
+    validate_text_length("Links", &input.links, LONG_TEXT_LIMIT)?;
+    validate_links(&input.links)?;
+    validate_text_length("Notes", &input.notes, NOTES_TEXT_LIMIT)?;
+    validate_text_length("Condition", &input.condition, STANDARD_TEXT_LIMIT)?;
+    if let Some(picture_path) = &input.picture_path {
+        validate_text_length("Picture path", picture_path, PATH_TEXT_LIMIT)?;
+        validate_picture_path(picture_path)?;
+    }
+
     Ok(())
 }
 
@@ -324,6 +360,86 @@ fn normalize_enum(value: String, allowed: &[&str], fallback: &str) -> String {
     }
 }
 
+fn validate_text_length(field_name: &str, value: &str, max_chars: usize) -> CommandResult<()> {
+    if value.chars().count() > max_chars {
+        return Err(format!(
+            "{field_name} must be {max_chars} characters or fewer."
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_links(value: &str) -> CommandResult<()> {
+    if value.trim().is_empty() {
+        return Ok(());
+    }
+    if looks_like_windows_path(value) {
+        return Err("Links must be http, https, or mailto URLs.".to_string());
+    }
+
+    let url = parse_url_or_implicit_https(value)
+        .ok_or_else(|| "Links must be http, https, or mailto URLs.".to_string())?;
+    if LINK_PROTOCOLS.contains(&url.scheme()) {
+        Ok(())
+    } else {
+        Err("Links must be http, https, or mailto URLs.".to_string())
+    }
+}
+
+fn validate_picture_path(value: &str) -> CommandResult<()> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(());
+    }
+    if value.starts_with("data:image/") {
+        return Ok(());
+    }
+    if looks_like_windows_path(value) || Path::new(value).is_absolute() {
+        return validate_picture_file_extension(value);
+    }
+    if let Ok(url) = Url::parse(value) {
+        if PICTURE_URL_PROTOCOLS.contains(&url.scheme()) {
+            return Ok(());
+        }
+        return Err(
+            "Picture path must be an absolute image path or an http/https image URL.".to_string(),
+        );
+    }
+
+    Err("Picture path must be an absolute image path or an http/https image URL.".to_string())
+}
+
+fn parse_url_or_implicit_https(value: &str) -> Option<Url> {
+    Url::parse(value)
+        .or_else(|_| Url::parse(&format!("https://{value}")))
+        .ok()
+}
+
+fn looks_like_windows_path(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    value.starts_with(r"\\")
+        || (bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && matches!(bytes[2], b'\\' | b'/'))
+}
+
+fn validate_picture_file_extension(value: &str) -> CommandResult<()> {
+    let extension = Path::new(value)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or_default();
+    if IMAGE_PATH_EXTENSIONS
+        .iter()
+        .any(|allowed| extension.eq_ignore_ascii_case(allowed))
+    {
+        Ok(())
+    } else {
+        Err("Picture path must use a supported image extension.".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,5 +468,78 @@ mod tests {
             input.picture_path.as_deref(),
             Some("C:\\Pictures\\part.jpg")
         );
+    }
+
+    #[test]
+    fn validation_rejects_unreasonable_quantities() {
+        let mut input = normalize_entry_input(InventoryEntryInput {
+            description: "Caliper".to_string(),
+            qty: Some(-1.0),
+            ..InventoryEntryInput::default()
+        });
+        assert!(validate_entry_input(&input)
+            .unwrap_err()
+            .contains("Quantity"));
+
+        input.qty = Some(f64::NAN);
+        assert!(validate_entry_input(&input)
+            .unwrap_err()
+            .contains("Quantity"));
+
+        input.qty = Some(MAX_QUANTITY + 1.0);
+        assert!(validate_entry_input(&input)
+            .unwrap_err()
+            .contains("Quantity"));
+    }
+
+    #[test]
+    fn validation_rejects_overlong_text_fields() {
+        let input = normalize_entry_input(InventoryEntryInput {
+            description: "x".repeat(LONG_TEXT_LIMIT + 1),
+            manufacturer: "Mitutoyo".to_string(),
+            ..InventoryEntryInput::default()
+        });
+
+        assert!(validate_entry_input(&input)
+            .unwrap_err()
+            .contains("Description"));
+    }
+
+    #[test]
+    fn validation_rejects_unsafe_link_values() {
+        let valid = normalize_entry_input(InventoryEntryInput {
+            description: "Caliper".to_string(),
+            links: "https://example.com/manual".to_string(),
+            ..InventoryEntryInput::default()
+        });
+        assert!(validate_entry_input(&valid).is_ok());
+
+        let invalid = normalize_entry_input(InventoryEntryInput {
+            description: "Caliper".to_string(),
+            links: "C:\\Pictures\\part.jpg".to_string(),
+            ..InventoryEntryInput::default()
+        });
+        assert!(validate_entry_input(&invalid)
+            .unwrap_err()
+            .contains("Links"));
+    }
+
+    #[test]
+    fn validation_rejects_unsafe_picture_paths() {
+        let valid = normalize_entry_input(InventoryEntryInput {
+            description: "Caliper".to_string(),
+            picture_path: Some("C:\\Pictures\\part.png".to_string()),
+            ..InventoryEntryInput::default()
+        });
+        assert!(validate_entry_input(&valid).is_ok());
+
+        let invalid = normalize_entry_input(InventoryEntryInput {
+            description: "Caliper".to_string(),
+            picture_path: Some("relative\\part.txt".to_string()),
+            ..InventoryEntryInput::default()
+        });
+        assert!(validate_entry_input(&invalid)
+            .unwrap_err()
+            .contains("Picture path"));
     }
 }

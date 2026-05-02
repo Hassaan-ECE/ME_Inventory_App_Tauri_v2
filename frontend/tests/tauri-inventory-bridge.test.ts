@@ -2,7 +2,7 @@ import { act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { APP_VERSION } from "@/app/branding";
-import type { UpdateState } from "@/features/inventory/types";
+import type { InventoryEntryInput, UpdateState } from "@/features/inventory/types";
 
 describe("tauri inventory bridge", () => {
   beforeEach(() => {
@@ -115,6 +115,189 @@ describe("tauri inventory bridge", () => {
     }
   });
 
+  it("rejects malformed Tauri inventory payloads before they reach React state", async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      dbPath: "inventory.feox",
+      entries: [{ description: "missing id" }],
+      shared: { message: "ready" },
+    });
+
+    vi.resetModules();
+    vi.doMock("@tauri-apps/api/core", () => ({
+      convertFileSrc: (path: string) => `asset://${path}`,
+      invoke,
+      isTauri: () => true,
+    }));
+    vi.doMock("@tauri-apps/api/event", () => ({
+      listen: vi.fn(() => Promise.resolve(() => undefined)),
+    }));
+    mockWindowStatePersistence();
+
+    try {
+      await import("@/integrations/tauri/tauriInventoryBridge");
+      const desktopBridge = Reflect.get(window, "inventoryDesktop") as NonNullable<Window["inventoryDesktop"]> | undefined;
+
+      await expect(desktopBridge?.loadInventory()).rejects.toThrow("Invalid inventory entry");
+    } finally {
+      vi.doUnmock("@tauri-apps/api/core");
+      vi.doUnmock("@tauri-apps/api/event");
+      vi.doUnmock("@/integrations/tauri/windowState");
+      vi.resetModules();
+    }
+  });
+
+  it("rejects malformed Tauri query, mutation, delete, and export payloads", async () => {
+    const invoke = vi.fn((command: string) => {
+      switch (command) {
+        case "query_inventory":
+          return Promise.resolve({
+            counts: {},
+            dbPath: "inventory.feox",
+            entries: "not-an-array",
+            shared: { message: "ready" },
+            totalFiltered: 0,
+          });
+        case "delete_entry":
+          return Promise.resolve({ message: "missing entry id" });
+        case "export_excel":
+          return Promise.resolve({ outputPath: 42 });
+        default:
+          return Promise.resolve({
+            entry: { description: "missing id" },
+            message: "saved",
+            shared: { message: "ready" },
+          });
+      }
+    });
+
+    vi.resetModules();
+    vi.doMock("@tauri-apps/api/core", () => ({
+      convertFileSrc: (path: string) => `asset://${path}`,
+      invoke,
+      isTauri: () => true,
+    }));
+    vi.doMock("@tauri-apps/api/event", () => ({
+      listen: vi.fn(() => Promise.resolve(() => undefined)),
+    }));
+    mockWindowStatePersistence();
+
+    try {
+      await import("@/integrations/tauri/tauriInventoryBridge");
+      const desktopBridge = Reflect.get(window, "inventoryDesktop") as NonNullable<Window["inventoryDesktop"]> | undefined;
+
+      await expect(
+        desktopBridge?.queryInventory?.({
+          filters: { assetNumber: "", description: "", location: "", manufacturer: "", model: "" },
+          query: "",
+          scope: "inventory",
+          sort: { column: "manufacturer", direction: "asc" },
+        }),
+      ).rejects.toThrow("Invalid inventory entries");
+      await expect(desktopBridge?.createEntry(validEntryInput())).rejects.toThrow("Invalid inventory entry");
+      await expect(desktopBridge?.updateEntry("1", validEntryInput())).rejects.toThrow("Invalid inventory entry");
+      await expect(desktopBridge?.toggleVerifiedEntry("1", true)).rejects.toThrow("Invalid inventory entry");
+      await expect(desktopBridge?.setArchivedEntry("1", true)).rejects.toThrow("Invalid inventory entry");
+      await expect(desktopBridge?.deleteEntry("1")).rejects.toThrow("missing entry id");
+      await expect(desktopBridge?.exportExcel?.()).rejects.toThrow("Excel export payload");
+    } finally {
+      vi.doUnmock("@tauri-apps/api/core");
+      vi.doUnmock("@tauri-apps/api/event");
+      vi.doUnmock("@/integrations/tauri/windowState");
+      vi.resetModules();
+    }
+  });
+
+  it("normalizes malformed but recoverable Tauri inventory fields", async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      dbPath: "inventory.feox",
+      entries: [
+        {
+          id: "1",
+          archived: false,
+          description: "Caliper",
+          lifecycleStatus: "bad",
+          qty: "not-a-number",
+          verifiedInSurvey: true,
+          workingStatus: "also-bad",
+        },
+      ],
+      shared: { message: "ready", mutationMode: "shared" },
+    });
+
+    vi.resetModules();
+    vi.doMock("@tauri-apps/api/core", () => ({
+      convertFileSrc: (path: string) => `asset://${path}`,
+      invoke,
+      isTauri: () => true,
+    }));
+    vi.doMock("@tauri-apps/api/event", () => ({
+      listen: vi.fn(() => Promise.resolve(() => undefined)),
+    }));
+    mockWindowStatePersistence();
+
+    try {
+      await import("@/integrations/tauri/tauriInventoryBridge");
+      const desktopBridge = Reflect.get(window, "inventoryDesktop") as NonNullable<Window["inventoryDesktop"]> | undefined;
+
+      await expect(desktopBridge?.loadInventory()).resolves.toMatchObject({
+        entries: [
+          {
+            id: "1",
+            lifecycleStatus: "active",
+            qty: null,
+            workingStatus: "unknown",
+          },
+        ],
+        shared: { canModify: true, mutationMode: "shared" },
+      });
+    } finally {
+      vi.doUnmock("@tauri-apps/api/core");
+      vi.doUnmock("@tauri-apps/api/event");
+      vi.doUnmock("@/integrations/tauri/windowState");
+      vi.resetModules();
+    }
+  });
+
+  it("normalizes malformed shared status values at the bridge boundary", async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      dbPath: "inventory.feox",
+      entries: [validBridgeEntry()],
+      shared: "not-a-shared-status",
+    });
+
+    vi.resetModules();
+    vi.doMock("@tauri-apps/api/core", () => ({
+      convertFileSrc: (path: string) => `asset://${path}`,
+      invoke,
+      isTauri: () => true,
+    }));
+    vi.doMock("@tauri-apps/api/event", () => ({
+      listen: vi.fn(() => Promise.resolve(() => undefined)),
+    }));
+    mockWindowStatePersistence();
+
+    try {
+      await import("@/integrations/tauri/tauriInventoryBridge");
+      const desktopBridge = Reflect.get(window, "inventoryDesktop") as NonNullable<Window["inventoryDesktop"]> | undefined;
+
+      await expect(desktopBridge?.loadInventory()).resolves.toMatchObject({
+        entries: [{ id: "1" }],
+        shared: {
+          available: false,
+          canModify: true,
+          enabled: true,
+          message: "Shared sync status unavailable.",
+          mutationMode: "local",
+        },
+      });
+    } finally {
+      vi.doUnmock("@tauri-apps/api/core");
+      vi.doUnmock("@tauri-apps/api/event");
+      vi.doUnmock("@/integrations/tauri/windowState");
+      vi.resetModules();
+    }
+  });
+
   it("backs desktop update checks with Tauri updater progress events", async () => {
     const receivedStates: UpdateState[] = [];
     const update = {
@@ -194,6 +377,57 @@ describe("tauri inventory bridge", () => {
       vi.resetModules();
     }
   });
+
+  it("normalizes malformed updater metadata before publishing state", async () => {
+    const receivedStates: UpdateState[] = [];
+    const update = {
+      body: { unexpected: true },
+      currentVersion: 42,
+      date: 10,
+      download: vi.fn(),
+      install: vi.fn(),
+      version: 99,
+    };
+    const check = vi.fn().mockResolvedValue(update);
+
+    vi.resetModules();
+    vi.doMock("@tauri-apps/api/core", () => ({
+      convertFileSrc: (path: string) => `asset://${path}`,
+      invoke: vi.fn(),
+      isTauri: () => true,
+    }));
+    vi.doMock("@tauri-apps/api/event", () => ({
+      listen: vi.fn(() => Promise.resolve(() => undefined)),
+    }));
+    vi.doMock("@tauri-apps/plugin-updater", () => ({ check }));
+    mockWindowStatePersistence();
+
+    try {
+      await import("@/integrations/tauri/tauriInventoryBridge");
+      const desktopBridge = Reflect.get(window, "inventoryDesktop") as NonNullable<Window["inventoryDesktop"]> | undefined;
+      const cleanup = desktopBridge?.onUpdateStateChanged?.((state) => {
+        receivedStates.push(state);
+      });
+
+      const state = await desktopBridge?.checkForUpdate?.();
+
+      expect(state).toMatchObject({
+        available: true,
+        currentVersion: APP_VERSION,
+        status: "available",
+      });
+      expect(state?.latestVersion).toBeUndefined();
+      expect(state?.notes).toBeUndefined();
+      expect(receivedStates.at(-1)).toEqual(state);
+      cleanup?.();
+    } finally {
+      vi.doUnmock("@tauri-apps/api/core");
+      vi.doUnmock("@tauri-apps/api/event");
+      vi.doUnmock("@tauri-apps/plugin-updater");
+      vi.doUnmock("@/integrations/tauri/windowState");
+      vi.resetModules();
+    }
+  });
 });
 
 function mockWindowStatePersistence() {
@@ -205,6 +439,41 @@ function mockWindowStatePersistence() {
   }));
 
   return { installWindowStatePersistence, saveCurrentWindowState };
+}
+
+function validBridgeEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "1",
+    archived: false,
+    description: "Caliper",
+    lifecycleStatus: "active",
+    qty: 1,
+    verifiedInSurvey: false,
+    workingStatus: "working",
+    ...overrides,
+  };
+}
+
+function validEntryInput(): InventoryEntryInput {
+  return {
+    archived: false,
+    assetNumber: "",
+    assignedTo: "",
+    condition: "",
+    description: "Caliper",
+    lifecycleStatus: "active",
+    links: "",
+    location: "",
+    manufacturer: "",
+    model: "",
+    notes: "",
+    picturePath: "",
+    projectName: "",
+    qty: 1,
+    serialNumber: "",
+    verifiedInSurvey: false,
+    workingStatus: "working",
+  };
 }
 
 function createDeferred<T>(): {

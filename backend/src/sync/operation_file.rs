@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::model::{db_error, now_timestamp};
 
+use super::{auth, timestamps::validate_operation_timestamps};
 use super::{
     CorruptRemoteFile, CorruptRemoteReason, SharedSyncPaths, SyncCoreError, SyncCoreErrorKind,
     SyncCoreResult, SyncOperationEnvelope, SyncOperationType, CHECKSUM_PREFIX, LOCAL_SEQ_WIDTH,
@@ -20,7 +21,7 @@ use super::{
 pub(crate) fn canonical_operation_checksum(
     operation: &SyncOperationEnvelope,
 ) -> SyncCoreResult<String> {
-    let bytes = canonical_json_bytes_without_checksum(operation)?;
+    let bytes = canonical_json_bytes_without_checksum_or_auth(operation)?;
     Ok(format!("{CHECKSUM_PREFIX}{}", sha256_hex(&bytes)))
 }
 
@@ -28,6 +29,15 @@ pub(crate) fn canonical_operation_json(
     operation: &SyncOperationEnvelope,
 ) -> SyncCoreResult<Vec<u8>> {
     canonical_json_bytes(operation)
+}
+
+pub(super) fn sign_operation_for_configured_trust(
+    operation: &mut SyncOperationEnvelope,
+) -> SyncCoreResult<()> {
+    operation.auth = None;
+    let bytes = canonical_json_bytes_without_checksum_or_auth(operation)?;
+    operation.auth = auth::sign_canonical_bytes("sync.operation.v1", &bytes)?;
+    Ok(())
 }
 
 pub(crate) fn operation_file_path(
@@ -196,6 +206,15 @@ pub(crate) fn read_operation_file_for_identity(
         ));
     }
 
+    if let Err(detail) = validate_operation_timestamps(&operation) {
+        return Err(corrupt_with_content(
+            path,
+            CorruptRemoteReason::InvalidEnvelope,
+            detail,
+            &bytes,
+        ));
+    }
+
     let expected_checksum = canonical_operation_checksum(&operation).map_err(|error| {
         corrupt_with_content(
             path,
@@ -213,6 +232,15 @@ pub(crate) fn read_operation_file_for_identity(
         ));
     }
 
+    if let Err(detail) = verify_operation_auth(&operation) {
+        return Err(corrupt_with_content(
+            path,
+            CorruptRemoteReason::InvalidEnvelope,
+            detail,
+            &bytes,
+        ));
+    }
+
     Ok(operation)
 }
 
@@ -225,7 +253,7 @@ pub(crate) fn operation_file_name(local_seq: u64) -> String {
 }
 
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
-    let digest = sha256_digest(bytes);
+    let digest = sha256_digest_bytes(bytes);
     let mut hex = String::with_capacity(64);
     for byte in digest {
         hex.push(nibble_to_hex(byte >> 4));
@@ -258,7 +286,25 @@ fn validate_operation_for_write(operation: &SyncOperationEnvelope) -> SyncCoreRe
             format!("Operation envelope payload does not match entity reference: {detail}"),
         )
     })?;
+    validate_operation_timestamps(operation).map_err(|detail| {
+        SyncCoreError::new(
+            SyncCoreErrorKind::InvalidEnvelope,
+            format!("Operation envelope has invalid timestamps: {detail}"),
+        )
+    })?;
+    verify_operation_auth(operation).map_err(|detail| {
+        SyncCoreError::new(
+            SyncCoreErrorKind::InvalidEnvelope,
+            format!("Operation envelope has invalid authentication: {detail}"),
+        )
+    })?;
     Ok(())
+}
+
+fn verify_operation_auth(operation: &SyncOperationEnvelope) -> Result<(), String> {
+    let bytes = canonical_json_bytes_without_checksum_or_auth(operation)
+        .map_err(|error| error.to_string())?;
+    auth::verify_canonical_bytes("sync.operation.v1", &bytes, operation.auth.as_deref())
 }
 
 fn validate_operation_payload_identity(operation: &SyncOperationEnvelope) -> Result<(), String> {
@@ -359,10 +405,13 @@ fn canonical_json_bytes<T: Serialize>(value: &T) -> SyncCoreResult<Vec<u8>> {
     Ok(serde_json::to_vec(&value)?)
 }
 
-fn canonical_json_bytes_without_checksum<T: Serialize>(value: &T) -> SyncCoreResult<Vec<u8>> {
+fn canonical_json_bytes_without_checksum_or_auth<T: Serialize>(
+    value: &T,
+) -> SyncCoreResult<Vec<u8>> {
     let mut value = serde_json::to_value(value)?;
     if let Value::Object(object) = &mut value {
         object.remove("checksum");
+        object.remove("auth");
     }
     let value = canonicalize_json_value(value);
     Ok(serde_json::to_vec(&value)?)
@@ -456,7 +505,7 @@ fn nibble_to_hex(nibble: u8) -> char {
     }
 }
 
-fn sha256_digest(bytes: &[u8]) -> [u8; 32] {
+pub(super) fn sha256_digest_bytes(bytes: &[u8]) -> [u8; 32] {
     const H0: [u32; 8] = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
         0x5be0cd19,

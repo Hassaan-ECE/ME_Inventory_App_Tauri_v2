@@ -1,8 +1,8 @@
-# Current Checklist
+# Release Evidence Checklist
 
-Last updated: 2026-05-01
+Last updated: 2026-05-02
 
-Read `docs/engineering/AGENT_RUNBOOK.md` before release work. Completed cleanup history lives in `docs/engineering/DONE_CHECKLIST.md`.
+This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path. For current hardening status, use `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md`. Read `docs/engineering/AGENT_RUNBOOK.md` before release work.
 
 ## Status Legend
 
@@ -11,7 +11,30 @@ Read `docs/engineering/AGENT_RUNBOOK.md` before release work. Completed cleanup 
 - `[x]` done
 - `[!]` blocked or needs decision
 
-## Fresh 1.0.0 Release Smoke
+## Current 1.0.1 Release Blockers
+
+- [x] Build release binary and produce `1.0.1` NSIS installer.
+- [x] Manually sign the produced `1.0.1` installer with the Tauri updater key after the NSIS wrapper hit Windows error 1224.
+- [x] Stage `1.0.1` assets locally under `release\v1.0.1\`.
+- [x] Stage `1.0.1` assets on the shared release drive under `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.1\`.
+- [ ] Upload `1.0.1` assets to GitHub Release `v1.0.1` and verify `releases/latest/download/latest.json`.
+- [ ] Validate installed `1.0.0` updates to signed `1.0.1`.
+- [ ] Run packaged `1.0.1` NSIS install smoke.
+- [ ] Run real shared-drive multi-machine sync smoke.
+- [ ] Confirm packaged CSP, image preview/open behavior, and signed updater behavior.
+- [ ] Record tester, machine names, installer path, updater artifact path, GitHub release URL, SHA-256, commit, source version, result, and date.
+
+## Current 1.0.1 Evidence
+
+| Check | Date | Tester | Machine(s) | Artifact / URL | SHA-256 | Result | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `1.0.1` small validation | 2026-05-02 | Codex | Build machine | Source tree |  | Partial pass | Passed Bun version, lint, targeted frontend bridge/column tests, Rust fmt/check, shared-sync coordinator unit filter, and sync HMAC integration filter. `cargo test --test sync_core recovery` timed out after 5 minutes and was stopped; full test suites were not run. |
+| `1.0.1` signed local/shared staging | 2026-05-02 | Codex | Build machine | `release\v1.0.1\`; `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.1\ME Inventory_1.0.1_x64-setup.exe` | `a7b133a87784cb28811b0541191faa08a869e85fd1ef421880a641c9cf920293` | Staged; GitHub upload pending | Tauri build compiled the release binary and produced the installer, but NSIS bundling exited with Windows error 1224. The installer was manually signed with `tauri signer sign`; `.sig`, `latest.json`, and `SHA256SUMS.txt` were staged locally and on the shared drive. |
+
+## Historical 0.9.x To 1.0.0 Path
+
+<details>
+<summary>Completed and pending version-by-version release steps</summary>
 
 - [x] Back up root shared `current.json` before the fresh `0.9.0` reset.
 - [x] Move old shared release folders from `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\` into a timestamped backup folder.
@@ -77,7 +100,12 @@ Read `docs/engineering/AGENT_RUNBOOK.md` before release work. Completed cleanup 
 - [ ] Validate installed `0.9.9` updates to signed `1.0.0`.
 - [ ] Run real shared-drive multi-machine sync smoke.
 
-## Evidence To Record
+</details>
+
+## Historical Evidence
+
+<details>
+<summary>0.9.x and 1.0.0 build/upload evidence</summary>
 
 | Check | Date | Tester | Machine(s) | Artifact / URL | SHA-256 | Result | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -115,9 +143,11 @@ Read `docs/engineering/AGENT_RUNBOOK.md` before release work. Completed cleanup 
 | `1.0.0` signed GitHub updater smoke |  |  |  |  |  |  |  |
 | Real shared-drive multi-machine sync smoke |  |  |  |  |  |  |  |
 
-## Current Blockers
+</details>
 
-- `1.0.0` still needs installed updater smoke from `0.9.9`.
+## Notes
+
+- `1.0.1` still needs GitHub release upload and installed updater smoke from `1.0.0`.
 - Real two-machine smoke still needs to validate snapshot bootstrap, operation compaction, fast convergence, and field-level merge on the S-drive.
 
 ## Current Artifact Paths
@@ -130,13 +160,15 @@ Read `docs/engineering/AGENT_RUNBOOK.md` before release work. Completed cleanup 
 ## Validation Commands
 
 ```powershell
-& "$env:USERPROFILE\.bun\bin\bun.exe" run lint
-& "$env:USERPROFILE\.bun\bin\bun.exe" run test
-& "$env:USERPROFILE\.bun\bin\bun.exe" run build
+node scripts\run-bun.mjs run lint
+node scripts\run-bun.mjs run test
+node scripts\run-bun.mjs run build
 
 Push-Location backend
 cargo fmt -- --check
 cargo check
 cargo test
+cargo clippy --all-targets -- -D warnings
+cargo audit
 Pop-Location
 ```

@@ -1,4 +1,4 @@
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::{
     model::{
@@ -8,33 +8,41 @@ use crate::{
         InventoryQueryInput, InventoryQueryResult, InventorySharedStatus, InventorySyncResult,
     },
     query::{get_inventory_counts, query_entries},
-    shared_watcher::SharedSyncWatcher,
+    shared_sync::SharedSyncCoordinator,
+    shared_watcher::{self, SharedSyncWatcher},
     store::InventoryDb,
     sync::{self, SyncOperationType},
 };
 
 #[tauri::command]
-pub(crate) fn load_inventory(db: State<'_, InventoryDb>) -> CommandResult<InventorySyncResult> {
-    load_inventory_from_store(&db)
+pub(crate) fn load_inventory(
+    coordinator: State<'_, SharedSyncCoordinator>,
+    db: State<'_, InventoryDb>,
+) -> CommandResult<InventorySyncResult> {
+    load_inventory_from_store_with_status(&db, coordinator.background_status()?)
 }
 
 #[tauri::command]
 pub(crate) fn query_inventory(
     input: InventoryQueryInput,
+    coordinator: State<'_, SharedSyncCoordinator>,
     db: State<'_, InventoryDb>,
 ) -> CommandResult<InventoryQueryResult> {
-    query_inventory_from_store(input, &db)
+    query_inventory_from_store_with_status(input, &db, coordinator.background_status()?)
 }
 
 #[tauri::command]
 pub(crate) async fn sync_inventory(
     app: AppHandle,
+    coordinator: State<'_, SharedSyncCoordinator>,
     watcher: State<'_, SharedSyncWatcher>,
     db: State<'_, InventoryDb>,
 ) -> CommandResult<InventorySyncResult> {
+    let coordinator = coordinator.inner().clone();
     let db = db.inner().clone();
     let (result, entries, db_path) = tauri::async_runtime::spawn_blocking(move || {
-        let result = sync::run_shared_sync(&db)?;
+        let result = coordinator.run_exclusive("shared sync", || sync::run_shared_sync(&db))?;
+        let _ = coordinator.set_background_status(result.shared.clone());
         let entries = if result.entries_changed {
             db.load_entries()?
         } else {
@@ -61,60 +69,95 @@ pub(crate) async fn sync_inventory(
 
 #[tauri::command]
 pub(crate) fn create_entry(
+    app: AppHandle,
     input: InventoryEntryInput,
+    coordinator: State<'_, SharedSyncCoordinator>,
     db: State<'_, InventoryDb>,
 ) -> CommandResult<InventoryEntryMutationResult> {
-    let result = create_entry_in_store(input, &db)?;
-    schedule_shared_publish(db.inner().clone());
+    let coordinator = coordinator.inner().clone();
+    let result =
+        coordinator.run_exclusive("inventory create", || create_entry_in_store(input, &db))?;
+    schedule_shared_publish(app, db.inner().clone(), coordinator);
     Ok(result)
 }
 
 #[tauri::command]
 pub(crate) fn update_entry(
+    app: AppHandle,
     entry_id: String,
     input: InventoryEntryInput,
     edit_context: Option<InventoryEntryEditContext>,
+    coordinator: State<'_, SharedSyncCoordinator>,
     db: State<'_, InventoryDb>,
 ) -> CommandResult<InventoryEntryMutationResult> {
-    let result = update_entry_in_store(&entry_id, input, edit_context, &db)?;
-    schedule_shared_publish(db.inner().clone());
+    let coordinator = coordinator.inner().clone();
+    let result = coordinator.run_exclusive("inventory update", || {
+        update_entry_in_store(&entry_id, input, edit_context, &db)
+    })?;
+    schedule_shared_publish(app, db.inner().clone(), coordinator);
     Ok(result)
 }
 
 #[tauri::command]
 pub(crate) fn toggle_verified_entry(
+    app: AppHandle,
     entry_id: String,
     next_verified: bool,
+    coordinator: State<'_, SharedSyncCoordinator>,
     db: State<'_, InventoryDb>,
 ) -> CommandResult<InventoryEntryMutationResult> {
-    let result = toggle_verified_entry_in_store(&entry_id, next_verified, &db)?;
-    schedule_shared_publish(db.inner().clone());
+    let coordinator = coordinator.inner().clone();
+    let result = coordinator.run_exclusive("inventory verify", || {
+        toggle_verified_entry_in_store(&entry_id, next_verified, &db)
+    })?;
+    schedule_shared_publish(app, db.inner().clone(), coordinator);
     Ok(result)
 }
 
 #[tauri::command]
 pub(crate) fn set_archived_entry(
+    app: AppHandle,
     entry_id: String,
     archived: bool,
+    coordinator: State<'_, SharedSyncCoordinator>,
     db: State<'_, InventoryDb>,
 ) -> CommandResult<InventoryEntryMutationResult> {
-    let result = set_archived_entry_in_store(&entry_id, archived, &db)?;
-    schedule_shared_publish(db.inner().clone());
+    let coordinator = coordinator.inner().clone();
+    let result = coordinator.run_exclusive("inventory archive", || {
+        set_archived_entry_in_store(&entry_id, archived, &db)
+    })?;
+    schedule_shared_publish(app, db.inner().clone(), coordinator);
     Ok(result)
 }
 
 #[tauri::command]
 pub(crate) fn delete_entry(
+    app: AppHandle,
     entry_id: String,
+    coordinator: State<'_, SharedSyncCoordinator>,
     db: State<'_, InventoryDb>,
 ) -> CommandResult<InventoryDeleteMutationResult> {
-    let result = delete_entry_in_store(&entry_id, &db)?;
-    schedule_shared_publish(db.inner().clone());
+    let coordinator = coordinator.inner().clone();
+    let result =
+        coordinator.run_exclusive("inventory delete", || delete_entry_in_store(&entry_id, &db))?;
+    schedule_shared_publish(app, db.inner().clone(), coordinator);
     Ok(result)
 }
 
+#[cfg(test)]
 fn load_inventory_from_store(db: &InventoryDb) -> CommandResult<InventorySyncResult> {
-    let shared = sync::startup_inventory_status("FeOxDB local store ready. Shared sync starting.");
+    load_inventory_from_store_with_status(db, None)
+}
+
+fn load_inventory_from_store_with_status(
+    db: &InventoryDb,
+    latest_background_status: Option<InventorySharedStatus>,
+) -> CommandResult<InventorySyncResult> {
+    let shared = latest_background_status.unwrap_or_else(|| {
+        let message = sync::last_local_recovery_message(db)
+            .unwrap_or_else(|| "FeOxDB local store ready. Shared sync starting.".to_string());
+        sync::startup_inventory_status(message)
+    });
     let entries = db.load_entries()?;
 
     Ok(InventorySyncResult {
@@ -125,21 +168,33 @@ fn load_inventory_from_store(db: &InventoryDb) -> CommandResult<InventorySyncRes
     })
 }
 
-fn schedule_shared_publish(db: InventoryDb) {
+fn schedule_shared_publish(app: AppHandle, db: InventoryDb, coordinator: SharedSyncCoordinator) {
     let _ = tauri::async_runtime::spawn_blocking(move || {
-        let _ = sync::publish_pending_local_changes(&db);
+        let status = match coordinator.run_exclusive("shared publish", || {
+            sync::publish_pending_local_changes(&db)
+        }) {
+            Ok(result) => result.shared,
+            Err(error) => sync::shared_inventory_status(
+                &db,
+                &format!("Background shared publish failed: {error}"),
+            ),
+        };
+        let _ = coordinator.set_background_status(status);
         db.flush();
+        let _ = app.emit(shared_watcher::SHARED_INVENTORY_CHANGED_EVENT, ());
     });
 }
 
-fn query_inventory_from_store(
+fn query_inventory_from_store_with_status(
     input: InventoryQueryInput,
     db: &InventoryDb,
+    latest_background_status: Option<InventorySharedStatus>,
 ) -> CommandResult<InventoryQueryResult> {
     let all_entries = db.load_entries()?;
     let counts = get_inventory_counts(&all_entries);
     let (entries, total_filtered) = query_entries(&all_entries, input);
-    let shared = sync::shared_inventory_status(db, "FeOxDB local store ready.");
+    let shared = latest_background_status
+        .unwrap_or_else(|| sync::shared_inventory_status(db, "FeOxDB local store ready."));
 
     Ok(InventoryQueryResult {
         counts,
@@ -566,6 +621,41 @@ mod tests {
         assert_eq!(loaded.entries[0].description, "Startup local");
         assert_eq!(outbox_count(&db), 0);
         assert!(loaded.shared.message.contains("Shared sync starting"));
+    }
+
+    #[test]
+    fn load_and_query_surface_latest_background_publish_status() {
+        let db = test_db();
+        let status = InventorySharedStatus {
+            available: false,
+            can_modify: true,
+            enabled: true,
+            has_local_only_changes: Some(true),
+            last_snapshot_id: None,
+            message: "Background shared publish failed: permission denied".to_string(),
+            mutation_mode: "local".to_string(),
+            revision: Some("7".to_string()),
+            shared_root_path: Some("S:\\ME".to_string()),
+            sync_interval_ms: Some(500),
+        };
+
+        let loaded = load_inventory_from_store_with_status(&db, Some(status.clone())).unwrap();
+        let queried = query_inventory_from_store_with_status(
+            InventoryQueryInput::default(),
+            &db,
+            Some(status),
+        )
+        .unwrap();
+
+        assert_eq!(
+            loaded.shared.message,
+            "Background shared publish failed: permission denied"
+        );
+        assert_eq!(
+            queried.shared.message,
+            "Background shared publish failed: permission denied"
+        );
+        assert_eq!(queried.shared.has_local_only_changes, Some(true));
     }
 
     #[test]
