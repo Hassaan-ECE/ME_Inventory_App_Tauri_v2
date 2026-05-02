@@ -1,28 +1,23 @@
-#[allow(dead_code)]
-#[path = "../src/domain/model.rs"]
-mod model;
-#[allow(dead_code)]
-#[path = "../src/storage/mod.rs"]
-mod store;
-#[allow(dead_code)]
-#[path = "../src/sync/mod.rs"]
-mod sync;
+#[path = "support/backend.rs"]
+mod backend;
+pub(crate) use backend::{model, store, sync};
 
 use std::{collections::HashMap, env, ffi::OsString, fs, path::PathBuf};
 
 use model::InventoryEntry;
 use store::InventoryDb;
-use sync::{
+use sync::test_support::{
     allocate_local_sequence, build_delete_operation, build_entry_operation,
     canonical_operation_checksum, canonical_operation_json, corrupt_remote_record_id,
     ensure_operation_log_layout, get_or_create_client_identity, operation_file_name,
-    operation_file_path, queue_entry_operation, read_operation_file, record_corrupt_remote_file,
-    recover_local_sync_state, resolve_shared_root_from_env_value, scan_operation_files,
-    scan_operation_files_after_watermarks, sha256_hex, write_operation_file, CorruptRemoteFile,
-    CorruptRemoteReason, SharedSyncPaths, SyncClientIdentity, SyncCoreErrorKind, SyncEntryState,
-    SyncOperationEnvelope, SyncOperationPayload, SyncOperationType, SyncTombstoneRecord,
-    DEFAULT_SHARED_ROOT, SNAPSHOT_APPLY_PENDING_KEY,
+    operation_file_path, peek_next_local_sequence, read_operation_file, record_corrupt_remote_file,
+    resolve_shared_root_from_env_value, scan_operation_files,
+    scan_operation_files_after_watermarks, set_test_hmac_key, sha256_hex, write_operation_file,
+    CorruptRemoteFile, CorruptRemoteReason, SharedSyncPaths, SyncClientIdentity, SyncCoreErrorKind,
+    SyncEntryState, SyncOperationEnvelope, SyncOperationPayload, SyncOperationType,
+    SyncTombstoneRecord, DEFAULT_SHARED_ROOT, SNAPSHOT_APPLY_PENDING_KEY, SYNC_SCHEMA_VERSION,
 };
+use sync::{last_local_recovery_message, queue_entry_operation, recover_local_sync_state};
 use uuid::Uuid;
 
 #[test]
@@ -53,7 +48,7 @@ fn client_identity_and_local_sequence_are_persisted_in_inventory_db() {
     let db = InventoryDb::open_at(db_path).unwrap();
     let second_identity = get_or_create_client_identity(&db).unwrap();
     assert_eq!(second_identity, first_identity);
-    assert_eq!(sync::peek_next_local_sequence(&db).unwrap(), 3);
+    assert_eq!(peek_next_local_sequence(&db).unwrap(), 3);
 }
 
 #[test]
@@ -123,7 +118,7 @@ fn write_operation_file_uses_final_op_path_and_read_validates_it() {
 
 #[test]
 fn hmac_signed_operation_reads_successfully_when_key_is_configured() {
-    let _hmac = sync::set_test_hmac_key(Some("0123456789abcdef"));
+    let _hmac = set_test_hmac_key(Some("0123456789abcdef"));
     let root = unique_test_dir("sync-hmac-signed-operation");
     let paths = SharedSyncPaths::from_shared_root(&root);
     ensure_operation_log_layout(&paths).unwrap();
@@ -159,7 +154,7 @@ fn hmac_rejects_unsigned_tampered_and_wrong_key_operations() {
     let paths = SharedSyncPaths::from_shared_root(&root);
     ensure_operation_log_layout(&paths).unwrap();
 
-    let _hmac = sync::set_test_hmac_key(Some("0123456789abcdef"));
+    let _hmac = set_test_hmac_key(Some("0123456789abcdef"));
     let unsigned = sample_operation("client-hmac-unsigned", 1, "entry-hmac-unsigned");
     write_raw_operation(&paths, &unsigned);
     let unsigned_path =
@@ -212,7 +207,7 @@ fn hmac_rejects_unsigned_tampered_and_wrong_key_operations() {
     write_raw_operation(&paths, &signed_with_first_key);
 
     drop(_hmac);
-    let _wrong_hmac = sync::set_test_hmac_key(Some("fedcba9876543210"));
+    let _wrong_hmac = set_test_hmac_key(Some("fedcba9876543210"));
     let wrong_key_path = operation_file_path(
         &paths,
         &signed_with_first_key.client_id,
@@ -633,7 +628,7 @@ fn recovery_advances_next_local_sequence_after_existing_outbox() {
     let report = recover_local_sync_state(&db).unwrap();
 
     assert_eq!(report.repaired_local_sequence_markers, 1);
-    assert_eq!(sync::peek_next_local_sequence(&db).unwrap(), 6);
+    assert_eq!(peek_next_local_sequence(&db).unwrap(), 6);
 }
 
 #[test]
@@ -650,7 +645,7 @@ fn recovery_reports_interrupted_snapshot_apply() {
         report.snapshot_apply_pending.as_deref(),
         Some("snapshot-interrupted")
     );
-    assert!(sync::last_local_recovery_message(&db)
+    assert!(last_local_recovery_message(&db)
         .unwrap()
         .contains("interrupted snapshot"));
 }
@@ -847,7 +842,7 @@ fn delete_operation_payload_keeps_tombstone_details_only() {
 fn sample_operation(client_id: &str, local_seq: u64, entry_uuid: &str) -> SyncOperationEnvelope {
     let entry = sample_entry(entry_uuid);
     let mut operation = SyncOperationEnvelope {
-        schema_version: sync::SYNC_SCHEMA_VERSION,
+        schema_version: SYNC_SCHEMA_VERSION,
         op_id: format!("op-{client_id}-{local_seq}"),
         client_id: client_id.to_string(),
         device_id: format!("device-{client_id}"),

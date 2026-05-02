@@ -1,23 +1,18 @@
-#[allow(dead_code)]
-#[path = "../src/domain/model.rs"]
-mod model;
-#[allow(dead_code)]
-#[path = "../src/storage/mod.rs"]
-mod store;
-#[allow(dead_code)]
-#[path = "../src/sync/mod.rs"]
-mod sync;
+#[path = "support/backend.rs"]
+mod backend;
+pub(crate) use backend::{model, store, sync};
 
 use std::{env, fs, path::PathBuf};
 
 use model::InventoryEntry;
 use store::InventoryDb;
-use sync::{
+use sync::test_support::{
     build_delete_operation, build_entry_operation, canonical_operation_checksum,
-    canonical_operation_json, operation_file_path, run_shared_sync_with_root, SharedSyncPaths,
-    SyncClientIdentity, SyncConflictRecord, SyncEntryState, SyncOperationEnvelope,
-    SyncOperationType,
+    canonical_operation_json, operation_file_path, run_shared_sync_with_root, CorruptRemoteFile,
+    SharedSyncPaths, SyncClientIdentity, SyncConflictRecord, SyncEntryState, SyncOperationEnvelope,
+    SyncTombstoneRecord,
 };
+use sync::{queue_delete_operation, queue_entry_operation, SyncOperationType};
 use uuid::Uuid;
 
 #[test]
@@ -28,7 +23,7 @@ fn conflicting_existing_operation_file_keeps_local_operation_pending() {
 
     let entry = sample_entry("1", "entry-conflict", "Local pending");
     db.put_entry(&entry).unwrap();
-    sync::queue_entry_operation(
+    queue_entry_operation(
         &db,
         SyncOperationType::InventoryEntryCreate,
         entry,
@@ -72,8 +67,7 @@ fn delete_tombstone_for_absent_entry_is_persisted_after_pull() {
     let target_path = target_root.join("inventory.feox");
     let shared_root = existing_shared_root("sync-delete-root");
 
-    sync::queue_delete_operation(&db_source, "entry-absent", "2026-04-26T13:00:00.000Z", None)
-        .unwrap();
+    queue_delete_operation(&db_source, "entry-absent", "2026-04-26T13:00:00.000Z", None).unwrap();
     db_source.flush();
     run_shared_sync_with_root(&db_source, &shared_root).unwrap();
 
@@ -82,14 +76,14 @@ fn delete_tombstone_for_absent_entry_is_persisted_after_pull() {
         let result = run_shared_sync_with_root(&db_target, &shared_root).unwrap();
         assert!(!result.entries_changed);
         assert!(db_target
-            .sync_tombstone::<sync::SyncTombstoneRecord>("entry-absent")
+            .sync_tombstone::<SyncTombstoneRecord>("entry-absent")
             .unwrap()
             .is_some());
     }
 
     let reopened = InventoryDb::open_at(target_path).unwrap();
     assert!(reopened
-        .sync_tombstone::<sync::SyncTombstoneRecord>("entry-absent")
+        .sync_tombstone::<SyncTombstoneRecord>("entry-absent")
         .unwrap()
         .is_some());
 }
@@ -103,7 +97,7 @@ fn tombstone_blocks_older_remote_upsert_from_resurrecting_entry() {
     run_shared_sync_with_root(&db_deleted, &shared_root).unwrap();
     run_shared_sync_with_root(&db_source, &shared_root).unwrap();
 
-    sync::queue_delete_operation(
+    queue_delete_operation(
         &db_deleted,
         "entry-deleted",
         "2026-04-26T13:00:00.000Z",
@@ -115,7 +109,7 @@ fn tombstone_blocks_older_remote_upsert_from_resurrecting_entry() {
     let mut old_entry = sample_entry("1", "entry-deleted", "Old upsert");
     old_entry.updated_at = "2026-04-26T12:00:00.000Z".to_string();
     db_source.put_entry(&old_entry).unwrap();
-    sync::queue_entry_operation(
+    queue_entry_operation(
         &db_source,
         SyncOperationType::InventoryEntryCreate,
         old_entry,
@@ -434,7 +428,7 @@ fn newer_delete_wins_and_older_upsert_after_delete_is_logged() {
     assert!(delete_result.entries_changed);
     assert!(db.find_entry("entry-lww-delete").unwrap().is_none());
     assert!(db
-        .sync_tombstone::<sync::SyncTombstoneRecord>("entry-lww-delete")
+        .sync_tombstone::<SyncTombstoneRecord>("entry-lww-delete")
         .unwrap()
         .is_some());
 
@@ -480,7 +474,7 @@ fn newer_upsert_after_delete_restores_entry() {
     .unwrap();
     db.put_sync_tombstone(
         "entry-lww-restore",
-        &sync::SyncTombstoneRecord {
+        &SyncTombstoneRecord {
             entry_uuid: "entry-lww-restore".to_string(),
             deleted_at_utc: "2026-04-26T13:00:00.000Z".to_string(),
             op_id: "op-delete".to_string(),
@@ -514,14 +508,14 @@ fn newer_upsert_after_delete_restores_entry() {
         "Newer restore"
     );
     assert!(db
-        .sync_tombstone::<sync::SyncTombstoneRecord>("entry-lww-restore")
+        .sync_tombstone::<SyncTombstoneRecord>("entry-lww-restore")
         .unwrap()
         .is_none());
 }
 
-fn first_outbox_operation(db: &InventoryDb) -> sync::SyncOperationEnvelope {
+fn first_outbox_operation(db: &InventoryDb) -> SyncOperationEnvelope {
     let mut operation = None;
-    db.scan_sync_outbox_records::<sync::SyncOperationEnvelope, _>(None, 1, |_, record| {
+    db.scan_sync_outbox_records::<SyncOperationEnvelope, _>(None, 1, |_, record| {
         operation = Some(record);
         Ok(false)
     })
@@ -531,7 +525,7 @@ fn first_outbox_operation(db: &InventoryDb) -> sync::SyncOperationEnvelope {
 
 fn corrupt_remote_count(db: &InventoryDb) -> usize {
     let mut count = 0;
-    db.scan_sync_corrupt_records::<sync::CorruptRemoteFile, _>(usize::MAX, |_, _| {
+    db.scan_sync_corrupt_records::<CorruptRemoteFile, _>(usize::MAX, |_, _| {
         count += 1;
         Ok(true)
     })

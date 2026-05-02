@@ -212,6 +212,7 @@ fn query_inventory_from_store_with_status(
 mod tests {
     use super::*;
     use crate::model::{create_entry_from_input, InventoryEntryInput};
+    use crate::sync::test_support::SyncOperationEnvelope;
     use std::{env, fs, path::PathBuf};
     use uuid::Uuid;
 
@@ -283,7 +284,7 @@ mod tests {
 
     fn outbox_count(db: &InventoryDb) -> usize {
         let mut count = 0;
-        db.scan_sync_outbox_records::<sync::SyncOperationEnvelope, _>(None, usize::MAX, |_, _| {
+        db.scan_sync_outbox_records::<SyncOperationEnvelope, _>(None, usize::MAX, |_, _| {
             count += 1;
             Ok(true)
         })

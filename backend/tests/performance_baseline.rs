@@ -1,12 +1,6 @@
-#[allow(dead_code)]
-#[path = "../src/domain/model.rs"]
-mod model;
-#[allow(dead_code)]
-#[path = "../src/domain/query.rs"]
-mod query;
-#[allow(dead_code)]
-#[path = "../src/storage/mod.rs"]
-mod store;
+#[path = "support/core_backend.rs"]
+mod backend;
+pub(crate) use backend::{model, query, store};
 
 use std::{
     env, fs,

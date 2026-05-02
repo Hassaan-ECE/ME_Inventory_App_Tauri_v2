@@ -1,22 +1,17 @@
-#[allow(dead_code)]
-#[path = "../src/domain/model.rs"]
-mod model;
-#[allow(dead_code)]
-#[path = "../src/storage/mod.rs"]
-mod store;
-#[allow(dead_code)]
-#[path = "../src/sync/mod.rs"]
-mod sync;
+#[path = "support/backend.rs"]
+mod backend;
+pub(crate) use backend::{model, store, sync};
 
 use std::{env, fs, path::PathBuf};
 
 use model::InventoryEntry;
 use store::InventoryDb;
-use sync::{
+use sync::test_support::{
     build_entry_operation, canonical_operation_checksum, canonical_operation_json,
-    operation_file_path, run_shared_sync_with_root, SharedSyncPaths, SyncClientIdentity,
-    SyncConflictRecord, SyncOperationEnvelope, SyncOperationType,
+    operation_file_path, run_shared_sync_with_root, set_test_hmac_key, SharedSyncPaths,
+    SyncClientIdentity, SyncConflictRecord, SyncOperationEnvelope, SyncTombstoneRecord,
 };
+use sync::{queue_delete_operation, queue_entry_operation, SyncOperationType};
 use uuid::Uuid;
 
 #[test]
@@ -142,7 +137,7 @@ fn two_databases_push_and_pull_create_update_and_delete() {
     let entry = sample_entry("1", "entry-shared", "Created on A");
     db_a.put_entry(&entry).unwrap();
     db_a.set_next_entry_id(2).unwrap();
-    sync::queue_entry_operation(
+    queue_entry_operation(
         &db_a,
         SyncOperationType::InventoryEntryCreate,
         entry.clone(),
@@ -168,7 +163,7 @@ fn two_databases_push_and_pull_create_update_and_delete() {
     updated.description = "Updated on B".to_string();
     updated.updated_at = "2026-04-26T12:00:00.000Z".to_string();
     db_b.put_entry(&updated).unwrap();
-    sync::queue_entry_operation(
+    queue_entry_operation(
         &db_b,
         SyncOperationType::InventoryEntryUpdate,
         updated.clone(),
@@ -190,7 +185,7 @@ fn two_databases_push_and_pull_create_update_and_delete() {
     );
 
     let entry_to_delete = db_a.find_entry("entry-shared").unwrap().unwrap();
-    sync::queue_delete_operation(
+    queue_delete_operation(
         &db_a,
         entry_to_delete.entry_uuid.clone(),
         "2026-04-26T13:00:00.000Z",
@@ -205,14 +200,14 @@ fn two_databases_push_and_pull_create_update_and_delete() {
     assert!(pulled_delete.entries_changed);
     assert!(db_b.find_entry("entry-shared").unwrap().is_none());
     assert!(db_b
-        .sync_tombstone::<sync::SyncTombstoneRecord>("entry-shared")
+        .sync_tombstone::<SyncTombstoneRecord>("entry-shared")
         .unwrap()
         .is_some());
 }
 
 #[test]
 fn hmac_two_databases_push_and_pull_signed_operations() {
-    let _hmac = sync::set_test_hmac_key(Some("0123456789abcdef"));
+    let _hmac = set_test_hmac_key(Some("0123456789abcdef"));
     let db_a = test_db("sync-hmac-db-a");
     let db_b = test_db("sync-hmac-db-b");
     let shared_root = existing_shared_root("sync-hmac-two-db-root");
@@ -223,7 +218,7 @@ fn hmac_two_databases_push_and_pull_signed_operations() {
     let entry = sample_entry("1", "entry-hmac-shared", "Created with HMAC");
     db_a.put_entry(&entry).unwrap();
     db_a.set_next_entry_id(2).unwrap();
-    sync::queue_entry_operation(
+    queue_entry_operation(
         &db_a,
         SyncOperationType::InventoryEntryCreate,
         entry,
@@ -248,7 +243,7 @@ fn hmac_two_databases_push_and_pull_signed_operations() {
 
 #[test]
 fn hmac_signed_manifest_and_snapshot_apply_successfully() {
-    let _hmac = sync::set_test_hmac_key(Some("0123456789abcdef"));
+    let _hmac = set_test_hmac_key(Some("0123456789abcdef"));
     let db_source = test_db("sync-hmac-snapshot-source");
     let db_target = test_db("sync-hmac-snapshot-target");
     let shared_root = existing_shared_root("sync-hmac-snapshot-root");
@@ -289,7 +284,7 @@ fn repeated_pull_ignores_already_applied_operation() {
 
     let entry = sample_entry("1", "entry-idempotent", "Idempotent");
     db_source.put_entry(&entry).unwrap();
-    sync::queue_entry_operation(
+    queue_entry_operation(
         &db_source,
         SyncOperationType::InventoryEntryCreate,
         entry,
@@ -321,7 +316,7 @@ fn pushed_local_operations_advance_watermark_for_fast_repeated_sync() {
 
     let entry = sample_entry("1", "entry-watermark", "Watermark");
     db.put_entry(&entry).unwrap();
-    sync::queue_entry_operation(
+    queue_entry_operation(
         &db,
         SyncOperationType::InventoryEntryCreate,
         entry,
@@ -353,7 +348,7 @@ fn local_mutation_increments_sync_revision() {
     db.put_entry(&entry).unwrap();
     let before = db.sync_revision().unwrap();
 
-    sync::queue_entry_operation(
+    queue_entry_operation(
         &db,
         SyncOperationType::InventoryEntryCreate,
         entry,
@@ -384,7 +379,7 @@ fn scripted_one_machine_smoke_uses_env_shared_root() {
     created.updated_at = "2026-04-26T10:00:00.000Z".to_string();
     db_a.put_entry(&created).unwrap();
     db_a.set_next_entry_id(2).unwrap();
-    sync::queue_entry_operation(
+    queue_entry_operation(
         &db_a,
         SyncOperationType::InventoryEntryCreate,
         created.clone(),
@@ -404,7 +399,7 @@ fn scripted_one_machine_smoke_uses_env_shared_root() {
     updated.description = "Updated on client B".to_string();
     updated.updated_at = "2026-04-26T11:00:00.000Z".to_string();
     db_b.put_entry(&updated).unwrap();
-    sync::queue_entry_operation(
+    queue_entry_operation(
         &db_b,
         SyncOperationType::InventoryEntryUpdate,
         updated.clone(),
@@ -435,7 +430,7 @@ fn scripted_one_machine_smoke_uses_env_shared_root() {
     assert_eq!(conflict_count(&db_a), 1);
 
     let deleted = db_a.find_entry("entry-smoke-sync").unwrap().unwrap();
-    sync::queue_delete_operation(
+    queue_delete_operation(
         &db_a,
         &deleted.entry_uuid,
         "2026-04-26T12:00:00.000Z",
@@ -455,7 +450,7 @@ fn scripted_one_machine_smoke_uses_env_shared_root() {
     let mut restored = sample_entry("1", "entry-smoke-sync", "Restored on client B");
     restored.updated_at = "2026-04-26T13:00:00.000Z".to_string();
     db_b.put_entry(&restored).unwrap();
-    sync::queue_entry_operation(
+    queue_entry_operation(
         &db_b,
         SyncOperationType::InventoryEntryUpdate,
         restored.clone(),
@@ -496,7 +491,7 @@ fn scripted_one_machine_smoke_uses_env_shared_root() {
 
 fn outbox_count(db: &InventoryDb) -> usize {
     let mut count = 0;
-    db.scan_sync_outbox_records::<sync::SyncOperationEnvelope, _>(None, usize::MAX, |_, _| {
+    db.scan_sync_outbox_records::<SyncOperationEnvelope, _>(None, usize::MAX, |_, _| {
         count += 1;
         Ok(true)
     })
@@ -504,7 +499,7 @@ fn outbox_count(db: &InventoryDb) -> usize {
     count
 }
 
-fn read_outbox_operation(db: &InventoryDb, local_seq: u64) -> sync::SyncOperationEnvelope {
+fn read_outbox_operation(db: &InventoryDb, local_seq: u64) -> SyncOperationEnvelope {
     db.sync_outbox_record(local_seq).unwrap().unwrap()
 }
 
@@ -610,7 +605,7 @@ fn snapshot_file_count(shared_root: &PathBuf) -> usize {
 }
 
 fn assert_hmac_snapshot_rejection(scenario: &str, corrupt_shared_snapshot: impl FnOnce(&PathBuf)) {
-    let _hmac = sync::set_test_hmac_key(Some("0123456789abcdef"));
+    let _hmac = set_test_hmac_key(Some("0123456789abcdef"));
     let db_source = test_db(&format!("sync-hmac-{scenario}-source"));
     let db_target = test_db(&format!("sync-hmac-{scenario}-target"));
     let shared_root = existing_shared_root(&format!("sync-hmac-{scenario}-root"));

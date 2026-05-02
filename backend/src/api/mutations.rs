@@ -255,6 +255,7 @@ fn queue_delete_sync_operation_before_flush(
 mod tests {
     use super::*;
     use crate::model::update_entry_from_input;
+    use crate::sync::test_support::{SyncOperationEnvelope, SyncTombstoneRecord};
     use std::{env, fs, path::PathBuf};
     use uuid::Uuid;
 
@@ -360,7 +361,7 @@ mod tests {
         delete_entry_in_store(&created.entry.entry_uuid, &db).unwrap();
         let delete_op = read_outbox_operation(&db, 2);
         let tombstone = db
-            .sync_tombstone::<sync::SyncTombstoneRecord>(&created.entry.entry_uuid)
+            .sync_tombstone::<SyncTombstoneRecord>(&created.entry.entry_uuid)
             .unwrap()
             .unwrap();
 
@@ -481,7 +482,7 @@ mod tests {
         assert_eq!(shared.mutation_mode, "local");
     }
 
-    fn read_outbox_operation(db: &InventoryDb, local_seq: u64) -> sync::SyncOperationEnvelope {
+    fn read_outbox_operation(db: &InventoryDb, local_seq: u64) -> SyncOperationEnvelope {
         db.sync_outbox_record(local_seq).unwrap().unwrap()
     }
 
