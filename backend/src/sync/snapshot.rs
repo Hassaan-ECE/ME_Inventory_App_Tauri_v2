@@ -41,6 +41,7 @@ pub(crate) struct SnapshotApplyReport {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SnapshotPublishReport {
+    #[allow(dead_code)]
     pub compacted_operations: usize,
     pub corrupt_count: usize,
     pub snapshot_published: bool,

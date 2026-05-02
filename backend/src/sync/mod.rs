@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_imports)]
-
 mod apply;
 mod auth;
 mod conflicts;
@@ -13,37 +11,59 @@ mod snapshot;
 mod timestamps;
 mod types;
 
-pub(crate) use self::apply::{
-    publish_pending_local_changes, run_shared_sync, run_shared_sync_with_root,
-};
 #[cfg(test)]
+#[allow(unused_imports)]
+pub(crate) use self::apply::run_shared_sync_with_root;
+#[allow(unused_imports)]
+pub(crate) use self::apply::{publish_pending_local_changes, run_shared_sync};
+#[cfg(test)]
+#[allow(unused_imports)]
 pub(crate) use self::auth::set_test_hmac_key;
+#[cfg(test)]
+#[allow(unused_imports)]
 pub(crate) use self::conflicts::{
     corrupt_remote_record_id, record_corrupt_remote_file, record_corrupt_remote_files,
 };
+#[cfg(test)]
+#[allow(unused_imports)]
 pub(crate) use self::identity::{
     allocate_local_sequence, get_or_create_client_identity, peek_next_local_sequence,
 };
+#[cfg(test)]
+#[allow(unused_imports)]
 pub(crate) use self::operation_file::{
     canonical_operation_checksum, canonical_operation_json, operation_file_name,
     operation_file_path, read_operation_file, read_operation_file_for_identity, sha256_hex,
     write_operation_file,
 };
-pub(crate) use self::queue::{
-    build_delete_operation, build_entry_operation, queue_delete_operation, queue_entry_operation,
-};
+#[cfg(test)]
+#[allow(unused_imports)]
+pub(crate) use self::queue::{build_delete_operation, build_entry_operation};
+#[allow(unused_imports)]
+pub(crate) use self::queue::{queue_delete_operation, queue_entry_operation};
+#[allow(unused_imports)]
 pub(crate) use self::recovery::{last_local_recovery_message, recover_local_sync_state};
+#[cfg(test)]
+#[allow(unused_imports)]
 pub(crate) use self::scanning::{scan_operation_files, scan_operation_files_after_watermarks};
+#[cfg(test)]
+#[allow(unused_imports)]
 pub(crate) use self::shared_paths::{
-    ensure_operation_log_layout, queued_local_status, resolve_shared_root,
-    resolve_shared_root_from_env_value, resolved_shared_sync_paths, shared_inventory_status,
+    ensure_operation_log_layout, resolve_shared_root, resolve_shared_root_from_env_value,
+};
+#[allow(unused_imports)]
+pub(crate) use self::shared_paths::{
+    queued_local_status, resolved_shared_sync_paths, shared_inventory_status,
     startup_inventory_status,
 };
+#[cfg(test)]
+#[allow(unused_imports)]
 pub(crate) use self::snapshot::{
     apply_latest_snapshot_if_safe, maybe_publish_snapshot, SharedInventoryManifest,
     SharedInventorySnapshot, SnapshotApplyReport, SnapshotPublishReport, SnapshotWatermark,
     SNAPSHOT_APPLY_PENDING_KEY,
 };
+#[allow(unused_imports)]
 pub(crate) use self::types::{
     CorruptRemoteFile, CorruptRemoteReason, OperationScanReport, SharedSyncPaths,
     SharedSyncRunResult, SyncAppliedMarker, SyncClientIdentity, SyncConflictReason,

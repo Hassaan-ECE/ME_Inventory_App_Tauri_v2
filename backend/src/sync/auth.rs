@@ -16,6 +16,7 @@ thread_local! {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) struct TestHmacKeyGuard {
     previous: Option<Option<String>>,
 }
@@ -30,6 +31,7 @@ impl Drop for TestHmacKeyGuard {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn set_test_hmac_key(raw_key: Option<&str>) -> TestHmacKeyGuard {
     TEST_HMAC_KEY.with(|slot| {
         let previous = slot.replace(Some(raw_key.map(str::to_string)));

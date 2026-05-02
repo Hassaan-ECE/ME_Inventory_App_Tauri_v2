@@ -2,11 +2,12 @@ use crate::{model::CommandResult, store::InventoryDb};
 
 use super::{
     conflicts::sync_core_error, operation_file::validate_path_segment, SyncClientIdentity,
-    SYNC_SCHEMA_VERSION,
 };
 
+#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn get_or_create_client_identity(db: &InventoryDb) -> CommandResult<SyncClientIdentity> {
-    db.set_sync_schema_version(SYNC_SCHEMA_VERSION.into())?;
+    db.set_sync_schema_version(super::SYNC_SCHEMA_VERSION.into())?;
     let client_id = db.get_or_create_client_id()?;
     validate_path_segment(&client_id).map_err(|error| error.message)?;
     let device_id = db.get_or_create_device_id()?;

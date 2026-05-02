@@ -8,6 +8,8 @@ use super::{
     CorruptRemoteReason, OperationScanReport, SharedSyncPaths, SyncCoreResult, OP_FILE_SUFFIX,
 };
 
+#[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn scan_operation_files(paths: &SharedSyncPaths) -> SyncCoreResult<OperationScanReport> {
     scan_operation_files_after_watermarks(paths, &HashMap::new())
 }

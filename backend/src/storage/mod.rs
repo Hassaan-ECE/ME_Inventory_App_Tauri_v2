@@ -10,8 +10,7 @@ mod sync_state;
 #[cfg(test)]
 mod tests;
 
-#[allow(unused_imports)]
-pub(crate) use sync_state::{SyncKeyspace, SyncMetadata};
+pub(crate) use sync_state::SyncKeyspace;
 
 const INITIAL_DB_SIZE: u64 = 64 * 1024 * 1024;
 #[cfg(test)]
@@ -23,7 +22,6 @@ pub(crate) struct InventoryDb {
     db_path: PathBuf,
 }
 
-#[allow(dead_code)]
 impl InventoryDb {
     pub(crate) fn open(app: &tauri::AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
         let data_dir = app.path().app_data_dir()?;
@@ -38,6 +36,7 @@ impl InventoryDb {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn open_at_with_size(
         db_path: PathBuf,
         file_size: u64,

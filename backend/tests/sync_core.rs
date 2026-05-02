@@ -403,10 +403,11 @@ fn read_operation_file_rejects_non_utc_mutation_and_delete_payload_timestamps() 
         },
         1,
         "entry-non-utc-delete",
-        "2026-04-26T08:00:00.000-05:00",
+        "2026-04-26T13:00:00.000Z",
         None,
     )
     .unwrap();
+    delete_operation.payload.deleted_at_utc = Some("2026-04-26T08:00:00.000-05:00".to_string());
     delete_operation.checksum = canonical_operation_checksum(&delete_operation).unwrap();
     write_raw_operation(&paths, &delete_operation);
     let delete_corrupt = read_operation_file(

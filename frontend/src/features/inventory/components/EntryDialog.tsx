@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { FormEvent, ReactNode } from "react";
+import { useEffect, useId, useState } from "react";
+import type { ReactNode } from "react";
 
 import { Badge } from "@/shared/components/ui/badge";
 import { Input } from "@/shared/components/ui/input";
@@ -17,19 +17,15 @@ import {
 
 import { ContextRow, DialogActions, PicturePreviewCard } from "./entry-dialog/components";
 import {
-  buildEntryInput,
   buildFormState,
-  changedEntryInputFields,
   formatOptionLabel,
   type EntryFormState,
   updateForm,
 } from "./entry-dialog/form";
-import {
-  buildPicturePreviewSource,
-  openPictureTarget,
-  shouldLoadNativePicturePreview,
-  type PicturePreviewState,
-} from "./entry-dialog/picturePreview";
+import { useEntryDialogSubmit } from "./entry-dialog/useEntryDialogSubmit";
+import { useEntryPicturePreview } from "./entry-dialog/useEntryPicturePreview";
+import { useMediaQuery } from "./entry-dialog/useMediaQuery";
+import { useMountedRef } from "./entry-dialog/useMountedRef";
 
 const LARGE_VIEWPORT_QUERY = "(min-width: 1024px)";
 const SELECT_CLASS =
@@ -46,33 +42,41 @@ interface EntryDialogProps {
 }
 
 export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, readOnly = false, entry }: EntryDialogProps) {
-  const isMountedRef = useRef(true);
+  const isMountedRef = useMountedRef();
   const [initialForm] = useState<EntryFormState>(() => buildFormState(entry, defaultArchived));
   const [form, setForm] = useState<EntryFormState>(initialForm);
   const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
   const isLargeViewport = useMediaQuery(LARGE_VIEWPORT_QUERY);
   const formId = useId();
   const showsSidebarActions = mode === "edit" && Boolean(entry) && isLargeViewport;
   const picturePath = form.picturePath.trim();
-  const [picturePreviewSrc, setPicturePreviewSrc] = useState<string | null>(null);
-  const [picturePreviewState, setPicturePreviewState] = useState<PicturePreviewState>("empty");
-  const picturePreviewSrcRef = useRef<string | null>(null);
-  const canBrowsePicture = Boolean(window.inventoryDesktop?.pickPicturePath);
-  const canOpenPicture = Boolean(picturePath) && picturePreviewState === "loaded";
+  const { handleSubmit, isSaving } = useEntryDialogSubmit({
+    entry,
+    form,
+    initialForm,
+    isMountedRef,
+    mode,
+    onSave,
+    readOnly,
+    setError,
+  });
+  const {
+    canBrowsePicture,
+    canOpenPicture,
+    handleBrowsePicture,
+    handleOpenPicture,
+    handlePreviewError,
+    handlePreviewLoad,
+    picturePreviewSrc,
+    picturePreviewState,
+  } = useEntryPicturePreview({
+    isMountedRef,
+    onPicturePathChange: (selectedPath) => updateForm(setForm, "picturePath", selectedPath),
+    picturePath,
+    setError,
+  });
   const showInlinePicturePreview = (!showsSidebarActions && !readOnly) || (!showsSidebarActions && Boolean(picturePath));
   const showSidebarPicturePreview = showsSidebarActions && (!readOnly || Boolean(picturePath));
-
-  useLayoutEffect(() => {
-    picturePreviewSrcRef.current = picturePreviewSrc;
-  }, [picturePreviewSrc]);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
@@ -84,140 +88,6 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isSaving, onClose]);
-
-  useEffect(() => {
-    let active = true;
-    const canSetPreviewState = (): boolean => active && isMountedRef.current;
-
-    async function loadPicturePreview(): Promise<void> {
-      if (!picturePath) {
-        if (!canSetPreviewState()) {
-          return;
-        }
-        setPicturePreviewSrc(null);
-        setPicturePreviewState("empty");
-        return;
-      }
-
-      if (window.inventoryDesktop?.loadPicturePreview && shouldLoadNativePicturePreview(picturePath)) {
-        setPicturePreviewSrc(null);
-        setPicturePreviewState("loading");
-
-        try {
-          const previewSrc = await window.inventoryDesktop.loadPicturePreview(picturePath);
-          if (!canSetPreviewState()) {
-            return;
-          }
-          setPicturePreviewSrc(previewSrc);
-          setPicturePreviewState(previewSrc ? "loading" : "missing");
-        } catch {
-          if (canSetPreviewState()) {
-            setPicturePreviewSrc(null);
-            setPicturePreviewState("missing");
-          }
-        }
-        return;
-      }
-
-      const previewSrc = buildPicturePreviewSource(picturePath);
-      if (!canSetPreviewState()) {
-        return;
-      }
-      setPicturePreviewSrc(previewSrc);
-      setPicturePreviewState(previewSrc ? "loading" : "missing");
-    }
-
-    void loadPicturePreview();
-
-    return () => {
-      active = false;
-    };
-  }, [picturePath]);
-
-  async function handleBrowsePicture(): Promise<void> {
-    if (!window.inventoryDesktop?.pickPicturePath) {
-      return;
-    }
-
-    try {
-      const selectedPath = await window.inventoryDesktop.pickPicturePath();
-      if (!isMountedRef.current) {
-        return;
-      }
-      if (!selectedPath) {
-        return;
-      }
-
-      setError(null);
-      updateForm(setForm, "picturePath", selectedPath);
-    } catch (browseError) {
-      if (!isMountedRef.current) {
-        return;
-      }
-      setError(browseError instanceof Error ? browseError.message : "Could not browse for a picture.");
-    }
-  }
-
-  async function handleOpenPicture(): Promise<void> {
-    const targetPath = form.picturePath.trim();
-    if (!targetPath) {
-      return;
-    }
-
-    const opened = await openPictureTarget(targetPath);
-    if (!isMountedRef.current) {
-      return;
-    }
-    if (!opened) {
-      setError("Could not open the selected picture.");
-      return;
-    }
-
-    setError(null);
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-
-    if (readOnly) {
-      return;
-    }
-
-    const result = buildEntryInput(form);
-    if ("error" in result) {
-      setError(result.error);
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      setError(null);
-      await onSave(result.value, buildEditContext(mode, entry, initialForm, result.value));
-    } catch (submissionError) {
-      if (!isMountedRef.current) {
-        return;
-      }
-      setIsSaving(false);
-      setError(submissionError instanceof Error ? submissionError.message : "Could not save this entry.");
-    }
-  }
-
-  function handlePreviewError(previewSrc: string): void {
-    if (!isMountedRef.current || picturePreviewSrcRef.current !== previewSrc) {
-      return;
-    }
-
-    setPicturePreviewSrc(null);
-    setPicturePreviewState("missing");
-  }
-
-  function handlePreviewLoad(previewSrc: string): void {
-    if (!isMountedRef.current || picturePreviewSrcRef.current !== previewSrc) {
-      return;
-    }
-
-    setPicturePreviewState("loaded");
-  }
 
   return (
     <div
@@ -504,51 +374,4 @@ function Field({ children, className, label }: FieldProps) {
       {children}
     </label>
   );
-}
-
-function buildEditContext(
-  mode: "add" | "edit",
-  entry: InventoryEntry | null | undefined,
-  initialForm: EntryFormState | null,
-  input: InventoryEntryInput,
-): InventoryEntryEditContext | undefined {
-  if (mode !== "edit" || !entry || !initialForm) {
-    return undefined;
-  }
-
-  const initialInput = buildEntryInput(initialForm);
-  return {
-    baseVersion: entry.updatedAt,
-    changedFields: "value" in initialInput ? changedEntryInputFields(initialInput.value, input) : [],
-  };
-}
-
-function useMediaQuery(query: string): boolean {
-  const subscribe = useCallback((onStoreChange: () => void) => subscribeToMediaQuery(query, onStoreChange), [query]);
-  const getSnapshot = useCallback(() => getMediaQuerySnapshot(query), [query]);
-
-  return useSyncExternalStore(subscribe, getSnapshot, getMediaQueryServerSnapshot);
-}
-
-function subscribeToMediaQuery(query: string, onStoreChange: () => void): () => void {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return () => undefined;
-  }
-
-  const mediaQuery = window.matchMedia(query);
-  const handleChange = (): void => onStoreChange();
-  mediaQuery.addEventListener("change", handleChange);
-  return () => mediaQuery.removeEventListener("change", handleChange);
-}
-
-function getMediaQuerySnapshot(query: string): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return false;
-  }
-
-  return window.matchMedia(query).matches;
-}
-
-function getMediaQueryServerSnapshot(): boolean {
-  return false;
 }
