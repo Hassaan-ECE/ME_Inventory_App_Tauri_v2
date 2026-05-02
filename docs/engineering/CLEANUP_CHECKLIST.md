@@ -17,7 +17,7 @@ This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path
 - [x] Manually sign the produced `1.0.1` installer with the Tauri updater key after the NSIS wrapper hit Windows error 1224.
 - [x] Stage `1.0.1` assets locally under `release\v1.0.1\`.
 - [x] Stage `1.0.1` assets on the shared release drive under `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.1\`.
-- [ ] Upload `1.0.1` assets to GitHub Release `v1.0.1` and verify `releases/latest/download/latest.json`.
+- [x] Upload `1.0.1` assets to GitHub Release `v1.0.1` and verify `releases/latest/download/latest.json`.
 - [ ] Validate installed `1.0.0` updates to signed `1.0.1`.
 - [ ] Run packaged `1.0.1` NSIS install smoke.
 - [ ] Run real shared-drive multi-machine sync smoke.
@@ -29,7 +29,8 @@ This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path
 | Check | Date | Tester | Machine(s) | Artifact / URL | SHA-256 | Result | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `1.0.1` small validation | 2026-05-02 | Codex | Build machine | Source tree |  | Partial pass | Passed Bun version, lint, targeted frontend bridge/column tests, Rust fmt/check, shared-sync coordinator unit filter, and sync HMAC integration filter. `cargo test --test sync_core recovery` timed out after 5 minutes and was stopped; full test suites were not run. |
-| `1.0.1` signed local/shared staging | 2026-05-02 | Codex | Build machine | `release\v1.0.1\`; `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.1\ME Inventory_1.0.1_x64-setup.exe` | `a7b133a87784cb28811b0541191faa08a869e85fd1ef421880a641c9cf920293` | Staged; GitHub upload pending | Tauri build compiled the release binary and produced the installer, but NSIS bundling exited with Windows error 1224. The installer was manually signed with `tauri signer sign`; `.sig`, `latest.json`, and `SHA256SUMS.txt` were staged locally and on the shared drive. |
+| `1.0.1` signed local/shared staging | 2026-05-02 | Codex | Build machine | `release\v1.0.1\`; `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.1\ME Inventory_1.0.1_x64-setup.exe` | `a7b133a87784cb28811b0541191faa08a869e85fd1ef421880a641c9cf920293` | Pass | Tauri build compiled the release binary and produced the installer, but NSIS bundling exited with Windows error 1224. The installer was manually signed with `tauri signer sign`; `.sig`, `latest.json`, and `SHA256SUMS.txt` were staged locally and on the shared drive. |
+| `1.0.1` GitHub Release asset upload | 2026-05-02 | Codex | GitHub | `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v1.0.1` | `a7b133a87784cb28811b0541191faa08a869e85fd1ef421880a641c9cf920293` | Pass | Uploaded `latest.json`, installer, `.sig`, and `SHA256SUMS.txt`; `releases/latest/download/latest.json` resolves to `1.0.1`. |
 
 ## Historical 0.9.x To 1.0.0 Path
 
@@ -147,7 +148,7 @@ This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path
 
 ## Notes
 
-- `1.0.1` still needs GitHub release upload and installed updater smoke from `1.0.0`.
+- `1.0.1` still needs installed updater smoke from `1.0.0`.
 - Real two-machine smoke still needs to validate snapshot bootstrap, operation compaction, fast convergence, and field-level merge on the S-drive.
 
 ## Current Artifact Paths
