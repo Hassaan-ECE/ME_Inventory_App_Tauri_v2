@@ -23,6 +23,21 @@ This README is the current project entry point. Detailed engineering notes live 
 
 Version note: `1.0.2` is the current source truth for the signed updater target. `1.0.1` is the expected updater baseline for installed-machine smoke.
 
+## Current Release
+
+`1.0.2` is published as the latest GitHub Release and is staged on the shared release drive.
+
+- GitHub Release: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v1.0.2`
+- Updater metadata: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/latest/download/latest.json`
+- Shared installer: `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.2\ME Inventory_1.0.2_x64-setup.exe`
+- Installer SHA-256: `54737d2589d679324c38dc90557b3daa061641bd5b96e4e60f0675b756bb957c`
+- Local staged assets: `release\v1.0.2\`
+- Release tag: `v1.0.2`
+
+Release validation passed on the build machine for Bun audit, frontend lint/tests/build, Rust format/check/tests, signed NSIS packaging, shared-drive staging, GitHub asset upload, and public updater metadata resolution. `cargo clippy` and `cargo audit` are still not installed locally, so those gates remain unavailable on this workstation.
+
+Manual validation still needed: install or update from `1.0.1` to `1.0.2`, confirm the visible app version, run the packaged CRUD/export/picture/link smoke, and run a real shared-drive multi-machine sync smoke.
+
 ## Project Layout
 
 ```text
@@ -335,7 +350,7 @@ Fresh `1.0.2` manual smoke:
 - Confirm a missing picture path shows the missing state without crashing.
 - Export Excel, cancel once, then save once to a path with spaces.
 - Open the workbook and confirm exactly `Inventory` and `Archive` sheets.
-- Upload the staged `1.0.2` GitHub Release assets, then from the installed `1.0.1` app confirm update check, download progress, install, and relaunch/update behavior.
+- Confirm the uploaded `1.0.2` GitHub Release assets and updater metadata, then from the installed `1.0.1` app confirm update check, download progress, install, and relaunch/update behavior.
 - Run a real shared-drive multi-machine smoke and confirm create/update/delete convergence plus stale-update conflict logging.
 - Confirm known old app-owned `.db` files are moved to `deprecated-db-backups` and are not loaded.
 - Record installer path, updater `.sig` path, GitHub release URL, SHA-256, commit, source version, tester, machines, result, and date.
