@@ -3,7 +3,6 @@ use std::{cmp::Ordering, collections::HashSet};
 use super::{codec::decode_entry, keys, InventoryDb};
 use crate::model::{db_error, numeric_id, CommandResult, InventoryEntry};
 
-#[allow(dead_code)]
 impl InventoryDb {
     pub(crate) fn has_entries(&self) -> CommandResult<bool> {
         Ok(!self

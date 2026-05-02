@@ -16,6 +16,7 @@ thread_local! {
 }
 
 #[cfg(test)]
+// Used by path-included sync integration tests through sync::test_support.
 #[allow(dead_code)]
 pub(crate) struct TestHmacKeyGuard {
     previous: Option<Option<String>>,
@@ -31,6 +32,7 @@ impl Drop for TestHmacKeyGuard {
 }
 
 #[cfg(test)]
+// Used by path-included sync integration tests through sync::test_support.
 #[allow(dead_code)]
 pub(crate) fn set_test_hmac_key(raw_key: Option<&str>) -> TestHmacKeyGuard {
     TEST_HMAC_KEY.with(|slot| {

@@ -17,7 +17,6 @@ const DB_EXTENSION: &str = ".db";
 const BACKUP_DIR_NAME: &str = "deprecated-db-backups";
 
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)]
 pub(crate) struct DeprecatedDbQuarantineReport {
     pub moved_files: Vec<String>,
     pub skipped_errors: Vec<String>,

@@ -36,6 +36,7 @@ impl InventoryDb {
     }
 
     #[cfg(test)]
+    // Used by path-included performance integration tests, not by the library test crate.
     #[allow(dead_code)]
     pub(crate) fn open_at_with_size(
         db_path: PathBuf,

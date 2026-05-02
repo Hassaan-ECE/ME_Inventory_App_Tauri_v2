@@ -21,6 +21,7 @@ pub(crate) use self::shared_paths::{
 pub(crate) use self::types::SyncOperationType;
 
 #[cfg(test)]
+// Shared test-support surface is imported piecemeal by different test crates.
 #[allow(unused_imports)]
 pub(crate) mod test_support {
     pub(crate) use super::apply::run_shared_sync_with_root;

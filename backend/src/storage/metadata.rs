@@ -1,6 +1,7 @@
 use super::{keys, sync_state::SyncMetadata, InventoryDb};
 use crate::model::CommandResult;
 
+// Metadata accessors intentionally cover migration/test state beyond the current runtime path.
 #[allow(dead_code)]
 impl InventoryDb {
     pub(crate) fn next_entry_id(&self) -> CommandResult<i64> {

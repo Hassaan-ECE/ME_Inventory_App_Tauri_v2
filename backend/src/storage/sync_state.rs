@@ -4,6 +4,7 @@ use super::{codec::decode_u64_value, keys, InventoryDb};
 use crate::model::{db_error, CommandResult};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+// Returned by metadata helpers and asserted in storage tests.
 #[allow(dead_code)]
 pub(crate) struct SyncMetadata {
     pub schema_version: Option<u32>,
@@ -15,6 +16,7 @@ pub(crate) struct SyncMetadata {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// Recovery/snapshot code uses a subset at runtime; tests exercise the full keyspace list.
 #[allow(dead_code)]
 pub(crate) enum SyncKeyspace {
     Outbox,
@@ -42,6 +44,7 @@ impl SyncKeyspace {
     }
 }
 
+// Sync storage exposes recovery/test maintenance helpers in addition to runtime hot paths.
 #[allow(dead_code)]
 impl InventoryDb {
     pub(crate) fn sync_watermark(&self, client_id: &str) -> CommandResult<Option<u64>> {

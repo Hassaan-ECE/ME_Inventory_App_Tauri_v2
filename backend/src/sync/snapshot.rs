@@ -41,6 +41,7 @@ pub(crate) struct SnapshotApplyReport {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SnapshotPublishReport {
+    // Kept for diagnostics even though the current status message only uses corrupt_count.
     #[allow(dead_code)]
     pub compacted_operations: usize,
     pub corrupt_count: usize,

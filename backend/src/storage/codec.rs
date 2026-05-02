@@ -3,7 +3,6 @@ use serde::{de::DeserializeOwned, Serialize};
 use super::{keys, InventoryDb};
 use crate::model::{db_error, CommandResult, InventoryEntry};
 
-#[allow(dead_code)]
 impl InventoryDb {
     pub(super) fn put_json<T: Serialize>(&self, key: &[u8], value: &T) -> CommandResult<bool> {
         let bytes = serde_json::to_vec(value).map_err(db_error)?;
@@ -33,6 +32,8 @@ impl InventoryDb {
         String::from_utf8(value).map(Some).map_err(db_error)
     }
 
+    // Used by schema metadata helpers that are exercised by tests and migrations.
+    #[allow(dead_code)]
     pub(super) fn get_u32(&self, key: &[u8], label: &str) -> CommandResult<Option<u32>> {
         self.get_string(key)?
             .map(|value| {
@@ -130,7 +131,6 @@ pub(super) fn decode_entry(value: &[u8]) -> CommandResult<InventoryEntry> {
     serde_json::from_slice(value).map_err(db_error)
 }
 
-#[allow(dead_code)]
 pub(super) fn decode_u64_value(value: &[u8], label: &str) -> CommandResult<u64> {
     let value = String::from_utf8(value.to_vec()).map_err(db_error)?;
     let local_seq = value

@@ -8,6 +8,7 @@ pub(super) const ENTRY_SCAN_BATCH_LIMIT: usize = 512;
 pub(super) const META_NEXT_ID: &[u8] = b"__meta:next_entry_id";
 pub(super) const SYNC_META_PREFIX: &str = "meta:";
 pub(super) const SYNC_STATE_PREFIX: &str = "sync:";
+// Schema metadata is exercised by tests and migration-safe storage helpers.
 #[allow(dead_code)]
 pub(super) const META_SCHEMA_VERSION: &[u8] = b"meta:schema_version";
 pub(super) const META_SYNC_SCHEMA_VERSION: &[u8] = b"meta:sync_schema_version";
@@ -15,7 +16,6 @@ pub(super) const META_CLIENT_ID: &[u8] = b"meta:client_id";
 pub(super) const META_DEVICE_ID: &[u8] = b"meta:device_id";
 pub(super) const META_NEXT_LOCAL_SEQ: &[u8] = b"meta:next_local_seq";
 pub(super) const META_SYNC_REVISION: &[u8] = b"meta:sync_revision";
-#[allow(dead_code)]
 pub(super) const META_LAST_SNAPSHOT_ID: &[u8] = b"meta:last_snapshot_id";
 pub(super) const SYNC_OUTBOX_PREFIX: &str = "sync:outbox:";
 pub(super) const SYNC_APPLIED_PREFIX: &str = "sync:applied:";
@@ -141,7 +141,6 @@ fn parse_padded_local_seq(value: &str) -> CommandResult<u64> {
     Ok(local_seq)
 }
 
-#[allow(dead_code)]
 pub(super) fn parse_segment_from_key(
     prefix: &str,
     key: &[u8],

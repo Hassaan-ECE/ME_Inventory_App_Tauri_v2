@@ -5,6 +5,7 @@ use super::{
 };
 
 #[cfg(test)]
+// Used by path-included sync integration tests through sync::test_support.
 #[allow(dead_code)]
 pub(crate) fn get_or_create_client_identity(db: &InventoryDb) -> CommandResult<SyncClientIdentity> {
     db.set_sync_schema_version(super::SYNC_SCHEMA_VERSION.into())?;
@@ -19,11 +20,15 @@ pub(crate) fn get_or_create_client_identity(db: &InventoryDb) -> CommandResult<S
     })
 }
 
+#[cfg(test)]
+// Used by path-included sync integration tests through sync::test_support.
 #[allow(dead_code)]
 pub(crate) fn peek_next_local_sequence(db: &InventoryDb) -> CommandResult<u64> {
     db.next_local_seq()
 }
 
+#[cfg(test)]
+// Used by path-included sync integration tests through sync::test_support.
 #[allow(dead_code)]
 pub(crate) fn allocate_local_sequence(db: &InventoryDb) -> CommandResult<u64> {
     let next_seq = db.reserve_next_local_seq()?;

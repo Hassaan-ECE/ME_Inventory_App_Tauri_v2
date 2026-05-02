@@ -107,6 +107,7 @@ pub(crate) fn write_operation_file(
     write_result.map(|_| final_path)
 }
 
+// Used by path-included sync integration tests through sync::test_support.
 #[allow(dead_code)]
 pub(crate) fn read_operation_file(path: &Path) -> Result<SyncOperationEnvelope, CorruptRemoteFile> {
     let file_name = file_name_string(path).ok_or_else(|| {
@@ -462,6 +463,7 @@ pub(super) fn parse_operation_file_name(file_name: &str) -> Result<u64, String> 
     sequence.parse::<u64>().map_err(db_error)
 }
 
+// Used by the test-only read_operation_file helper.
 #[allow(dead_code)]
 fn file_name_string(path: &Path) -> Option<String> {
     path.file_name()
