@@ -1,19 +1,23 @@
 #[path = "support/backend.rs"]
 mod backend;
 pub(crate) use backend::{model, store, sync};
+#[path = "support/sync_fixtures.rs"]
+mod sync_fixtures;
 
-use std::{env, fs, path::PathBuf};
+use std::fs;
 
 use model::InventoryEntry;
 use store::InventoryDb;
 use sync::test_support::{
-    build_delete_operation, build_entry_operation, canonical_operation_checksum,
-    canonical_operation_json, operation_file_path, run_shared_sync_with_root, CorruptRemoteFile,
-    SharedSyncPaths, SyncClientIdentity, SyncConflictRecord, SyncEntryState, SyncOperationEnvelope,
-    SyncTombstoneRecord,
+    canonical_operation_checksum, canonical_operation_json, operation_file_path,
+    run_shared_sync_with_root, SharedSyncPaths, SyncEntryState, SyncTombstoneRecord,
 };
 use sync::{queue_delete_operation, queue_entry_operation, SyncOperationType};
-use uuid::Uuid;
+use sync_fixtures::{
+    conflict_count, corrupt_remote_count, existing_shared_root, first_outbox_operation,
+    remote_delete_operation, remote_upsert_operation, remote_upsert_operation_with_fields,
+    sample_entry, test_db, unique_test_dir, write_remote_operation,
+};
 
 #[test]
 fn conflicting_existing_operation_file_keeps_local_operation_pending() {
@@ -513,36 +517,6 @@ fn newer_upsert_after_delete_restores_entry() {
         .is_none());
 }
 
-fn first_outbox_operation(db: &InventoryDb) -> SyncOperationEnvelope {
-    let mut operation = None;
-    db.scan_sync_outbox_records::<SyncOperationEnvelope, _>(None, 1, |_, record| {
-        operation = Some(record);
-        Ok(false)
-    })
-    .unwrap();
-    operation.unwrap()
-}
-
-fn corrupt_remote_count(db: &InventoryDb) -> usize {
-    let mut count = 0;
-    db.scan_sync_corrupt_records::<CorruptRemoteFile, _>(usize::MAX, |_, _| {
-        count += 1;
-        Ok(true)
-    })
-    .unwrap();
-    count
-}
-
-fn conflict_count(db: &InventoryDb) -> usize {
-    let mut count = 0;
-    db.scan_sync_conflict_records::<SyncConflictRecord, _>(usize::MAX, |_, _| {
-        count += 1;
-        Ok(true)
-    })
-    .unwrap();
-    count
-}
-
 fn entry_state_for_test(entry: &InventoryEntry, op_id: &str, deleted: bool) -> SyncEntryState {
     entry_state_for_test_with_fields(
         entry,
@@ -580,128 +554,4 @@ fn entry_state_for_test_with_fields(
         },
         updated_at_utc: entry.updated_at.clone(),
     }
-}
-
-fn remote_upsert_operation(
-    client_id: &str,
-    local_seq: u64,
-    op_id: &str,
-    mutation_ts_utc: &str,
-    entry: InventoryEntry,
-) -> SyncOperationEnvelope {
-    remote_upsert_operation_with_fields(
-        client_id,
-        local_seq,
-        op_id,
-        mutation_ts_utc,
-        entry,
-        vec!["description".to_string()],
-        None,
-    )
-}
-
-fn remote_upsert_operation_with_fields(
-    client_id: &str,
-    local_seq: u64,
-    op_id: &str,
-    mutation_ts_utc: &str,
-    mut entry: InventoryEntry,
-    changed_fields: Vec<String>,
-    base_version: Option<String>,
-) -> SyncOperationEnvelope {
-    entry.updated_at = mutation_ts_utc.to_string();
-    let identity = SyncClientIdentity {
-        client_id: client_id.to_string(),
-        device_id: format!("{client_id}-device"),
-    };
-    let mut operation = build_entry_operation(
-        &identity,
-        local_seq,
-        SyncOperationType::InventoryEntryUpdate,
-        entry,
-        changed_fields,
-        base_version,
-    )
-    .unwrap();
-    operation.op_id = op_id.to_string();
-    operation.mutation_ts_utc = mutation_ts_utc.to_string();
-    operation.created_at_utc = mutation_ts_utc.to_string();
-    operation.checksum = canonical_operation_checksum(&operation).unwrap();
-    operation
-}
-
-fn remote_delete_operation(
-    client_id: &str,
-    local_seq: u64,
-    op_id: &str,
-    mutation_ts_utc: &str,
-    entry_uuid: &str,
-) -> SyncOperationEnvelope {
-    let identity = SyncClientIdentity {
-        client_id: client_id.to_string(),
-        device_id: format!("{client_id}-device"),
-    };
-    let mut operation = build_delete_operation(
-        &identity,
-        local_seq,
-        entry_uuid.to_string(),
-        mutation_ts_utc,
-        None,
-    )
-    .unwrap();
-    operation.op_id = op_id.to_string();
-    operation.created_at_utc = mutation_ts_utc.to_string();
-    operation.checksum = canonical_operation_checksum(&operation).unwrap();
-    operation
-}
-
-fn write_remote_operation(shared_root: &PathBuf, operation: &SyncOperationEnvelope) {
-    let paths = SharedSyncPaths::from_shared_root(shared_root);
-    let path = operation_file_path(&paths, &operation.client_id, operation.local_seq).unwrap();
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(&path, canonical_operation_json(operation).unwrap()).unwrap();
-}
-
-fn test_db(prefix: &str) -> InventoryDb {
-    let root = unique_test_dir(prefix);
-    fs::create_dir_all(&root).unwrap();
-    InventoryDb::open_at(root.join("inventory.feox")).unwrap()
-}
-
-fn existing_shared_root(prefix: &str) -> PathBuf {
-    let root = unique_test_dir(prefix);
-    fs::create_dir_all(&root).unwrap();
-    root
-}
-
-fn sample_entry(id: &str, entry_uuid: &str, description: &str) -> InventoryEntry {
-    InventoryEntry {
-        id: id.to_string(),
-        database_id: id.parse::<i64>().ok(),
-        entry_uuid: entry_uuid.to_string(),
-        asset_number: format!("ME-{id}"),
-        serial_number: format!("SN-{id}"),
-        qty: Some(1.0),
-        manufacturer: "Mitutoyo".to_string(),
-        model: "500".to_string(),
-        description: description.to_string(),
-        project_name: "ME".to_string(),
-        location: "Lab".to_string(),
-        assigned_to: String::new(),
-        links: String::new(),
-        notes: String::new(),
-        lifecycle_status: "active".to_string(),
-        working_status: "unknown".to_string(),
-        condition: String::new(),
-        verified_in_survey: false,
-        archived: false,
-        manual_entry: true,
-        picture_path: String::new(),
-        created_at: "2026-04-26T00:00:00.000Z".to_string(),
-        updated_at: "2026-04-26T00:00:00.000Z".to_string(),
-    }
-}
-
-fn unique_test_dir(prefix: &str) -> PathBuf {
-    env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4().simple()))
 }

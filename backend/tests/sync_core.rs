@@ -1,8 +1,10 @@
 #[path = "support/backend.rs"]
 mod backend;
 pub(crate) use backend::{model, store, sync};
+#[path = "support/sync_fixtures.rs"]
+mod sync_fixtures;
 
-use std::{collections::HashMap, env, ffi::OsString, fs, path::PathBuf};
+use std::{collections::HashMap, ffi::OsString, fs, path::PathBuf};
 
 use model::InventoryEntry;
 use store::InventoryDb;
@@ -18,7 +20,7 @@ use sync::test_support::{
     SyncTombstoneRecord, DEFAULT_SHARED_ROOT, SNAPSHOT_APPLY_PENDING_KEY, SYNC_SCHEMA_VERSION,
 };
 use sync::{last_local_recovery_message, queue_entry_operation, recover_local_sync_state};
-use uuid::Uuid;
+use sync_fixtures::unique_test_dir;
 
 #[test]
 fn shared_root_prefers_env_override_and_defaults_to_me_path() {
@@ -931,8 +933,4 @@ fn sample_entry(entry_uuid: &str) -> InventoryEntry {
         created_at: "2026-04-26T00:00:00.000Z".to_string(),
         updated_at: "2026-04-26T00:00:00.000Z".to_string(),
     }
-}
-
-fn unique_test_dir(prefix: &str) -> PathBuf {
-    env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4().simple()))
 }

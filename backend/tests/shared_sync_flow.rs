@@ -1,18 +1,19 @@
 #[path = "support/backend.rs"]
 mod backend;
 pub(crate) use backend::{model, store, sync};
+#[path = "support/sync_fixtures.rs"]
+mod sync_fixtures;
 
 use std::{env, fs, path::PathBuf};
 
-use model::InventoryEntry;
 use store::InventoryDb;
-use sync::test_support::{
-    build_entry_operation, canonical_operation_checksum, canonical_operation_json,
-    operation_file_path, run_shared_sync_with_root, set_test_hmac_key, SharedSyncPaths,
-    SyncClientIdentity, SyncConflictRecord, SyncOperationEnvelope, SyncTombstoneRecord,
-};
+use sync::test_support::{run_shared_sync_with_root, set_test_hmac_key, SyncTombstoneRecord};
 use sync::{queue_delete_operation, queue_entry_operation, SyncOperationType};
-use uuid::Uuid;
+use sync_fixtures::{
+    conflict_count, existing_shared_root, first_snapshot_path, manifest_path, operation_file_count,
+    outbox_count, read_outbox_operation, remote_upsert_operation, remove_json_field, sample_entry,
+    snapshot_file_count, test_db, unique_test_dir, write_remote_operation,
+};
 
 #[test]
 fn unavailable_shared_root_bootstraps_local_outbox_without_creating_root() {
@@ -489,121 +490,6 @@ fn scripted_one_machine_smoke_uses_env_shared_root() {
     println!("PASS one-machine sync smoke converged");
 }
 
-fn outbox_count(db: &InventoryDb) -> usize {
-    let mut count = 0;
-    db.scan_sync_outbox_records::<SyncOperationEnvelope, _>(None, usize::MAX, |_, _| {
-        count += 1;
-        Ok(true)
-    })
-    .unwrap();
-    count
-}
-
-fn read_outbox_operation(db: &InventoryDb, local_seq: u64) -> SyncOperationEnvelope {
-    db.sync_outbox_record(local_seq).unwrap().unwrap()
-}
-
-fn conflict_count(db: &InventoryDb) -> usize {
-    let mut count = 0;
-    db.scan_sync_conflict_records::<SyncConflictRecord, _>(usize::MAX, |_, _| {
-        count += 1;
-        Ok(true)
-    })
-    .unwrap();
-    count
-}
-
-fn remote_upsert_operation(
-    client_id: &str,
-    local_seq: u64,
-    op_id: &str,
-    mutation_ts_utc: &str,
-    mut entry: InventoryEntry,
-) -> SyncOperationEnvelope {
-    entry.updated_at = mutation_ts_utc.to_string();
-    let identity = SyncClientIdentity {
-        client_id: client_id.to_string(),
-        device_id: format!("{client_id}-device"),
-    };
-    let mut operation = build_entry_operation(
-        &identity,
-        local_seq,
-        SyncOperationType::InventoryEntryUpdate,
-        entry,
-        vec!["description".to_string()],
-        None,
-    )
-    .unwrap();
-    operation.op_id = op_id.to_string();
-    operation.mutation_ts_utc = mutation_ts_utc.to_string();
-    operation.created_at_utc = mutation_ts_utc.to_string();
-    operation.checksum = canonical_operation_checksum(&operation).unwrap();
-    operation
-}
-
-fn write_remote_operation(shared_root: &PathBuf, operation: &SyncOperationEnvelope) {
-    let paths = SharedSyncPaths::from_shared_root(shared_root);
-    let path = operation_file_path(&paths, &operation.client_id, operation.local_seq).unwrap();
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(&path, canonical_operation_json(operation).unwrap()).unwrap();
-}
-
-fn operation_file_count(shared_root: &PathBuf) -> usize {
-    let ops_dir = shared_root.join("shared").join("inventory").join("ops");
-    if !ops_dir.exists() {
-        return 0;
-    }
-
-    let mut count = 0usize;
-    for client_dir in fs::read_dir(ops_dir).unwrap() {
-        let client_dir = client_dir.unwrap();
-        if !client_dir.file_type().unwrap().is_dir() {
-            continue;
-        }
-        count += fs::read_dir(client_dir.path())
-            .unwrap()
-            .filter(|entry| {
-                entry
-                    .as_ref()
-                    .unwrap()
-                    .file_name()
-                    .to_string_lossy()
-                    .ends_with(".op.json")
-            })
-            .count();
-    }
-    count
-}
-
-fn manifest_path(shared_root: &PathBuf) -> PathBuf {
-    shared_root
-        .join("shared")
-        .join("inventory")
-        .join("manifest.json")
-}
-
-fn snapshot_file_count(shared_root: &PathBuf) -> usize {
-    let snapshots_dir = shared_root
-        .join("shared")
-        .join("inventory")
-        .join("snapshots");
-    if !snapshots_dir.exists() {
-        return 0;
-    }
-
-    fs::read_dir(snapshots_dir)
-        .unwrap()
-        .filter(|entry| {
-            entry
-                .as_ref()
-                .unwrap()
-                .file_name()
-                .to_string_lossy()
-                .ends_with(".snapshot.json")
-        })
-        .count()
-}
-
 fn assert_hmac_snapshot_rejection(scenario: &str, corrupt_shared_snapshot: impl FnOnce(&PathBuf)) {
     let _hmac = set_test_hmac_key(Some("0123456789abcdef"));
     let db_source = test_db(&format!("sync-hmac-{scenario}-source"));
@@ -637,66 +523,4 @@ fn tamper_first_snapshot_description(shared_root: &PathBuf) {
     let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     value["entries"][0]["description"] = serde_json::Value::String("Tampered snapshot".to_string());
     fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
-}
-
-fn remove_json_field(path: &PathBuf, field: &str) {
-    let mut value: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
-    value.as_object_mut().unwrap().remove(field);
-    fs::write(path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
-}
-
-fn first_snapshot_path(shared_root: &PathBuf) -> PathBuf {
-    let snapshots_dir = shared_root
-        .join("shared")
-        .join("inventory")
-        .join("snapshots");
-    fs::read_dir(snapshots_dir)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .find(|path| path.extension().and_then(|extension| extension.to_str()) == Some("json"))
-        .expect("snapshot file should exist")
-}
-
-fn test_db(prefix: &str) -> InventoryDb {
-    let root = unique_test_dir(prefix);
-    fs::create_dir_all(&root).unwrap();
-    InventoryDb::open_at(root.join("inventory.feox")).unwrap()
-}
-
-fn existing_shared_root(prefix: &str) -> PathBuf {
-    let root = unique_test_dir(prefix);
-    fs::create_dir_all(&root).unwrap();
-    root
-}
-
-fn sample_entry(id: &str, entry_uuid: &str, description: &str) -> InventoryEntry {
-    InventoryEntry {
-        id: id.to_string(),
-        database_id: id.parse::<i64>().ok(),
-        entry_uuid: entry_uuid.to_string(),
-        asset_number: format!("ME-{id}"),
-        serial_number: format!("SN-{id}"),
-        qty: Some(1.0),
-        manufacturer: "Mitutoyo".to_string(),
-        model: "500".to_string(),
-        description: description.to_string(),
-        project_name: "ME".to_string(),
-        location: "Lab".to_string(),
-        assigned_to: String::new(),
-        links: String::new(),
-        notes: String::new(),
-        lifecycle_status: "active".to_string(),
-        working_status: "unknown".to_string(),
-        condition: String::new(),
-        verified_in_survey: false,
-        archived: false,
-        manual_entry: true,
-        picture_path: String::new(),
-        created_at: "2026-04-26T00:00:00.000Z".to_string(),
-        updated_at: "2026-04-26T00:00:00.000Z".to_string(),
-    }
-}
-
-fn unique_test_dir(prefix: &str) -> PathBuf {
-    env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4().simple()))
 }
