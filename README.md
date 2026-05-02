@@ -12,7 +12,7 @@ This README is the current project entry point. Detailed engineering notes live 
 
 - Active workspace: `c:\Projects\Active\ME_Inventory_App_Tauri_v2`
 - App name: `ME Inventory`
-- Display name: `ME Inventory v1.0.1`
+- Display name: `ME Inventory v1.0.2`
 - Version source: `package.json`, `backend\Cargo.toml`, and `backend\tauri.conf.json`
 - Tauri identifier: `com.me.inventory`
 - Install mode: current-user NSIS install
@@ -21,7 +21,7 @@ This README is the current project entry point. Detailed engineering notes live 
 - Shared sync: S-drive FeOx operation logs plus manifest/snapshot bootstrap
 - Deprecated local `.db` files: quarantined once into app-data backups and never used as data sources
 
-Version note: `1.0.1` is the current source truth for the signed updater target. `1.0.0` is the expected updater baseline for installed-machine smoke.
+Version note: `1.0.2` is the current source truth for the signed updater target. `1.0.1` is the expected updater baseline for installed-machine smoke.
 
 ## Project Layout
 
@@ -307,25 +307,25 @@ Publish the generated NSIS installer, its `.sig` file, SHA-256 sums, and a GitHu
 
 ```json
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "notes": "Release notes",
   "pub_date": "2026-05-02T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "contents of the generated .sig file",
-      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v1.0.1/ME%20Inventory_1.0.1_x64-setup.exe"
+      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v1.0.2/ME%20Inventory_1.0.2_x64-setup.exe"
     }
   }
 }
 ```
 
-Fresh `1.0.1` manual smoke:
+Fresh `1.0.2` manual smoke:
 
 - Confirm `package.json`, `backend\Cargo.toml`, and `backend\tauri.conf.json` versions match.
 - Confirm the app identifier is still `com.me.inventory`.
-- Update an installed `1.0.0` machine to `1.0.1`.
+- Update an installed `1.0.1` machine to `1.0.2`.
 - Launch from the installed shortcut.
-- Confirm the visible name and version are `ME Inventory v1.0.1`.
+- Confirm the visible name and version are `ME Inventory v1.0.2`.
 - On clean app data, confirm startup hydrates from the S-drive FeOx snapshot and newer operation files.
 - Close and reopen, then confirm row count stays stable.
 - Add, edit, verify, archive, restore, and delete a disposable smoke entry.
@@ -335,7 +335,7 @@ Fresh `1.0.1` manual smoke:
 - Confirm a missing picture path shows the missing state without crashing.
 - Export Excel, cancel once, then save once to a path with spaces.
 - Open the workbook and confirm exactly `Inventory` and `Archive` sheets.
-- Upload the staged `1.0.1` GitHub Release assets, then from the installed `1.0.0` app confirm update check, download progress, install, and relaunch/update behavior.
+- Upload the staged `1.0.2` GitHub Release assets, then from the installed `1.0.1` app confirm update check, download progress, install, and relaunch/update behavior.
 - Run a real shared-drive multi-machine smoke and confirm create/update/delete convergence plus stale-update conflict logging.
 - Confirm known old app-owned `.db` files are moved to `deprecated-db-backups` and are not loaded.
 - Record installer path, updater `.sig` path, GitHub release URL, SHA-256, commit, source version, tester, machines, result, and date.
@@ -373,7 +373,7 @@ Manual exercise:
 
 ## Open Work
 
-- Run real shared-drive multi-machine `1.0.1` update smoke from installed `1.0.0`.
+- Run real shared-drive multi-machine `1.0.2` update smoke from installed `1.0.1`.
 - Add conflict UI, locked-file smoke, and shared media storage.
 - Decide whether entries should move from the current compatibility projection to future `inventory:item:*` and ledger keyspaces.
 - Benchmark real inventory size for search, sort, startup, sync, and table rendering.
