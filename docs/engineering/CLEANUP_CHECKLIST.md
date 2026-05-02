@@ -17,7 +17,7 @@ This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path
 - [x] Sign the produced `1.0.2` installer with the Tauri updater key.
 - [x] Stage `1.0.2` assets locally under `release\v1.0.2\`.
 - [x] Stage `1.0.2` assets on the shared release drive under `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.2\`.
-- [!] Upload `1.0.2` assets to GitHub Release `v1.0.2` and verify `releases/latest/download/latest.json`; blocked on authenticated GitHub upload tooling in this shell (`gh` and GitHub token are unavailable).
+- [x] Upload `1.0.2` assets to GitHub Release `v1.0.2` and verify `releases/latest/download/latest.json`.
 - [ ] Validate installed `1.0.1` updates to signed `1.0.2`.
 - [ ] Run packaged `1.0.2` NSIS install smoke.
 - [ ] Run real shared-drive multi-machine sync smoke.
@@ -30,6 +30,7 @@ This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `1.0.2` release validation | 2026-05-02 | Codex | Build machine | Source tree |  | Pass | Passed `node scripts\run-bun.mjs audit`, frontend lint/test/build, backend `cargo fmt -- --check`, `cargo check`, and `cargo test`. `cargo clippy` and `cargo audit` are still unavailable locally. |
 | `1.0.2` signed local/shared staging | 2026-05-02 | Codex | Build machine | `release\v1.0.2\`; `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.2\ME Inventory_1.0.2_x64-setup.exe` | `54737d2589d679324c38dc90557b3daa061641bd5b96e4e60f0675b756bb957c` | Pass | First Tauri NSIS bundle attempt hit Windows error 1224 after compiling the release executable; deleting only the generated `1.0.2` installer and rerunning produced the installer and `.sig`. `latest.json` and `SHA256SUMS.txt` are staged locally and on the shared drive. |
+| `1.0.2` GitHub Release asset upload | 2026-05-02 | Codex | GitHub | `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v1.0.2` | `54737d2589d679324c38dc90557b3daa061641bd5b96e4e60f0675b756bb957c` | Pass | Uploaded `latest.json`, installer, `.sig`, and `SHA256SUMS.txt`; `releases/latest/download/latest.json` resolves to `1.0.2`, and the installer URL returns HTTP 200. GitHub normalized the installer asset name to `ME.Inventory_1.0.2_x64-setup.exe`, so `latest.json` uses that URL. |
 
 ## Previous 1.0.1 Evidence
 
