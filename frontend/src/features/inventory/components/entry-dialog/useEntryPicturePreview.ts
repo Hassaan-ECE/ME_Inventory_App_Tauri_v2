@@ -15,12 +15,23 @@ interface UseEntryPicturePreviewOptions {
   setError: (message: string | null) => void;
 }
 
+export interface EntryPicturePreviewControls {
+  canBrowsePicture: boolean;
+  canOpenPicture: boolean;
+  handleBrowsePicture: () => Promise<void>;
+  handleOpenPicture: () => Promise<void>;
+  handlePreviewError: (previewSrc: string) => void;
+  handlePreviewLoad: (previewSrc: string) => void;
+  picturePreviewSrc: string | null;
+  picturePreviewState: PicturePreviewState;
+}
+
 export function useEntryPicturePreview({
   isMountedRef,
   onPicturePathChange,
   picturePath,
   setError,
-}: UseEntryPicturePreviewOptions) {
+}: UseEntryPicturePreviewOptions): EntryPicturePreviewControls {
   const [picturePreviewSrc, setPicturePreviewSrc] = useState<string | null>(null);
   const [picturePreviewState, setPicturePreviewState] = useState<PicturePreviewState>("empty");
   const picturePreviewSrcRef = useRef<string | null>(null);

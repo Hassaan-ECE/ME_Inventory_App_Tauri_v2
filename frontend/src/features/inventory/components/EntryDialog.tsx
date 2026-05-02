@@ -5,29 +5,35 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Input } from "@/shared/components/ui/input";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { cn } from "@/shared/lib/utils";
-import {
-  LIFECYCLE_OPTIONS,
-  WORKING_STATUS_OPTIONS,
-  type InventoryEntry,
-  type InventoryEntryEditContext,
-  type InventoryEntryInput,
-  type LifecycleStatus,
-  type WorkingStatus,
+import type {
+  InventoryEntry,
+  InventoryEntryEditContext,
+  InventoryEntryInput,
+  LifecycleStatus,
+  WorkingStatus,
 } from "@/features/inventory/types";
 
-import { ContextRow, DialogActions, PicturePreviewCard } from "./entry-dialog/components";
+import { ContextRow, DialogActions } from "./entry-dialog/components";
+import {
+  ENTRY_BOOLEAN_FIELDS,
+  ENTRY_CONDITION_FIELD,
+  ENTRY_MAIN_INPUT_FIELDS,
+  ENTRY_SELECT_FIELDS,
+  buildEntryContextRows,
+  type EntrySelectField,
+} from "./entry-dialog/fieldMetadata";
 import {
   buildFormState,
   formatOptionLabel,
   type EntryFormState,
   updateForm,
 } from "./entry-dialog/form";
+import { PicturePreviewPanel } from "./entry-dialog/PicturePreviewPanel";
+import { useEntryDialogLayout } from "./entry-dialog/useEntryDialogLayout";
 import { useEntryDialogSubmit } from "./entry-dialog/useEntryDialogSubmit";
 import { useEntryPicturePreview } from "./entry-dialog/useEntryPicturePreview";
-import { useMediaQuery } from "./entry-dialog/useMediaQuery";
 import { useMountedRef } from "./entry-dialog/useMountedRef";
 
-const LARGE_VIEWPORT_QUERY = "(min-width: 1024px)";
 const SELECT_CLASS =
   "h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-shadow focus:border-ring focus:ring-[3px] focus:ring-ring/18 dark:bg-neutral-950 dark:text-neutral-100";
 const OPTION_CLASS = "bg-background text-foreground dark:bg-neutral-950 dark:text-neutral-100";
@@ -46,9 +52,7 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
   const [initialForm] = useState<EntryFormState>(() => buildFormState(entry, defaultArchived));
   const [form, setForm] = useState<EntryFormState>(initialForm);
   const [error, setError] = useState<string | null>(null);
-  const isLargeViewport = useMediaQuery(LARGE_VIEWPORT_QUERY);
   const formId = useId();
-  const showsSidebarActions = mode === "edit" && Boolean(entry) && isLargeViewport;
   const picturePath = form.picturePath.trim();
   const { handleSubmit, isSaving } = useEntryDialogSubmit({
     entry,
@@ -60,23 +64,22 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
     readOnly,
     setError,
   });
-  const {
-    canBrowsePicture,
-    canOpenPicture,
-    handleBrowsePicture,
-    handleOpenPicture,
-    handlePreviewError,
-    handlePreviewLoad,
-    picturePreviewSrc,
-    picturePreviewState,
-  } = useEntryPicturePreview({
+  const picturePreview = useEntryPicturePreview({
     isMountedRef,
     onPicturePathChange: (selectedPath) => updateForm(setForm, "picturePath", selectedPath),
     picturePath,
     setError,
   });
-  const showInlinePicturePreview = (!showsSidebarActions && !readOnly) || (!showsSidebarActions && Boolean(picturePath));
-  const showSidebarPicturePreview = showsSidebarActions && (!readOnly || Boolean(picturePath));
+  const {
+    showInlinePicturePreview,
+    showSidebarPicturePreview,
+    showsSidebarActions,
+  } = useEntryDialogLayout({
+    entry,
+    mode,
+    picturePath,
+    readOnly,
+  });
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent): void {
@@ -88,6 +91,15 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isSaving, onClose]);
+
+  function handleSelectChange(field: EntrySelectField, value: string): void {
+    if (field.key === "lifecycleStatus") {
+      updateForm(setForm, field.key, value as LifecycleStatus);
+      return;
+    }
+
+    updateForm(setForm, field.key, value as WorkingStatus);
+  }
 
   return (
     <div
@@ -128,146 +140,45 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
           <fieldset className="contents" disabled={readOnly || isSaving}>
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 lg:py-4">
               <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
-                <Field label="Asset Number">
+                {ENTRY_MAIN_INPUT_FIELDS.map((field) => (
+                  <Field className={field.className} key={field.key} label={field.label}>
+                    <Input
+                      autoFocus={field.autoFocus}
+                      inputMode={field.inputMode}
+                      placeholder={field.placeholder}
+                      value={form[field.key]}
+                      onChange={(event) => updateForm(setForm, field.key, event.currentTarget.value)}
+                    />
+                  </Field>
+                ))}
+
+                {ENTRY_SELECT_FIELDS.map((field) => (
+                  <Field key={field.key} label={field.label}>
+                    <select
+                      className={SELECT_CLASS}
+                      value={form[field.key]}
+                      onChange={(event) => handleSelectChange(field, event.currentTarget.value)}
+                    >
+                      {field.options.map((option) => (
+                        <option className={OPTION_CLASS} key={option} value={option}>
+                          {formatOptionLabel(option)}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                ))}
+
+                <Field className={ENTRY_CONDITION_FIELD.className} label={ENTRY_CONDITION_FIELD.label}>
                   <Input
-                    autoFocus
-                    placeholder="Optional asset tag"
-                    value={form.assetNumber}
-                    onChange={(event) => updateForm(setForm, "assetNumber", event.currentTarget.value)}
-                  />
-                </Field>
-
-                <Field label="Serial / Internal ID">
-                  <Input
-                    placeholder="Serial or internal ID"
-                    value={form.serialNumber}
-                    onChange={(event) => updateForm(setForm, "serialNumber", event.currentTarget.value)}
-                  />
-                </Field>
-
-                <Field label="Manufacturer / Brand">
-                  <Input
-                    placeholder="Maker, brand, or supplier"
-                    value={form.manufacturer}
-                    onChange={(event) => updateForm(setForm, "manufacturer", event.currentTarget.value)}
-                  />
-                </Field>
-
-                <Field label="Model / Part No.">
-                  <Input
-                    placeholder="Model or part number"
-                    value={form.model}
-                    onChange={(event) => updateForm(setForm, "model", event.currentTarget.value)}
-                  />
-                </Field>
-
-                <Field label="Quantity">
-                  <Input
-                    inputMode="decimal"
-                    placeholder="Quantity on hand"
-                    value={form.qty}
-                    onChange={(event) => updateForm(setForm, "qty", event.currentTarget.value)}
-                  />
-                </Field>
-
-                <Field label="Project">
-                  <Input
-                    placeholder="Project this entry supports"
-                    value={form.projectName}
-                    onChange={(event) => updateForm(setForm, "projectName", event.currentTarget.value)}
-                  />
-                </Field>
-
-                <Field className="lg:col-span-2" label="Description">
-                  <Input
-                    placeholder="Part or entry description"
-                    value={form.description}
-                    onChange={(event) => updateForm(setForm, "description", event.currentTarget.value)}
-                  />
-                </Field>
-
-                <Field label="Location">
-                  <Input
-                    placeholder="Shelf, room, bin, or area"
-                    value={form.location}
-                    onChange={(event) => updateForm(setForm, "location", event.currentTarget.value)}
-                  />
-                </Field>
-
-                <Field label="Used By / Assigned To">
-                  <Input
-                    placeholder="Person or team using it"
-                    value={form.assignedTo}
-                    onChange={(event) => updateForm(setForm, "assignedTo", event.currentTarget.value)}
-                  />
-                </Field>
-
-                <Field className="lg:col-span-2" label="Links">
-                  <Input
-                    placeholder="Product, vendor, or reference link"
-                    value={form.links}
-                    onChange={(event) => updateForm(setForm, "links", event.currentTarget.value)}
-                  />
-                </Field>
-
-                <Field label="Lifecycle">
-                  <select
-                    className={SELECT_CLASS}
-                    value={form.lifecycleStatus}
-                    onChange={(event) =>
-                      updateForm(setForm, "lifecycleStatus", event.currentTarget.value as LifecycleStatus)
-                    }
-                  >
-                    {LIFECYCLE_OPTIONS.map((option) => (
-                      <option className={OPTION_CLASS} key={option} value={option}>
-                        {formatOptionLabel(option)}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                <Field label="Working Status">
-                  <select
-                    className={SELECT_CLASS}
-                    value={form.workingStatus}
-                    onChange={(event) =>
-                      updateForm(setForm, "workingStatus", event.currentTarget.value as WorkingStatus)
-                    }
-                  >
-                    {WORKING_STATUS_OPTIONS.map((option) => (
-                      <option className={OPTION_CLASS} key={option} value={option}>
-                        {formatOptionLabel(option)}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                <Field className="lg:col-span-2" label="Condition">
-                  <Input
-                    placeholder="Condition or operating note"
-                    value={form.condition}
-                    onChange={(event) => updateForm(setForm, "condition", event.currentTarget.value)}
+                    placeholder={ENTRY_CONDITION_FIELD.placeholder}
+                    value={form[ENTRY_CONDITION_FIELD.key]}
+                    onChange={(event) => updateForm(setForm, ENTRY_CONDITION_FIELD.key, event.currentTarget.value)}
                   />
                 </Field>
 
                 {showInlinePicturePreview ? (
                   <div className="lg:col-span-2">
-                    <PicturePreviewCard
-                      canBrowse={canBrowsePicture}
-                      canOpen={canOpenPicture}
-                      compact={false}
-                      picturePath={picturePath}
-                      previewSrc={picturePreviewSrc}
-                      previewState={picturePreviewState}
-                      onBrowse={() => {
-                        void handleBrowsePicture();
-                      }}
-                      onOpen={() => {
-                        void handleOpenPicture();
-                      }}
-                      onPreviewError={handlePreviewError}
-                      onPreviewLoad={handlePreviewLoad}
-                    />
+                    <PicturePreviewPanel picturePath={picturePath} preview={picturePreview} />
                   </div>
                 ) : null}
 
@@ -281,24 +192,17 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-4 rounded-2xl border border-border/70 bg-background/70 px-4 py-3">
-                <label className="flex items-center gap-2 text-sm text-foreground">
-                  <input
-                    checked={form.verifiedInSurvey}
-                    className="size-4 accent-[var(--primary)]"
-                    type="checkbox"
-                    onChange={(event) => updateForm(setForm, "verifiedInSurvey", event.currentTarget.checked)}
-                  />
-                  Verified in survey
-                </label>
-                <label className="flex items-center gap-2 text-sm text-foreground">
-                  <input
-                    checked={form.archived}
-                    className="size-4 accent-[var(--primary)]"
-                    type="checkbox"
-                    onChange={(event) => updateForm(setForm, "archived", event.currentTarget.checked)}
-                  />
-                  Archived entry
-                </label>
+                {ENTRY_BOOLEAN_FIELDS.map((field) => (
+                  <label className="flex items-center gap-2 text-sm text-foreground" key={field.key}>
+                    <input
+                      checked={form[field.key]}
+                      className="size-4 accent-[var(--primary)]"
+                      type="checkbox"
+                      onChange={(event) => updateForm(setForm, field.key, event.currentTarget.checked)}
+                    />
+                    {field.label}
+                  </label>
+                ))}
               </div>
             </div>
           </fieldset>
@@ -314,22 +218,7 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
           <aside className="flex w-[19rem] shrink-0 flex-col bg-background/60 px-5 py-4">
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               {showSidebarPicturePreview ? (
-                <PicturePreviewCard
-                  canBrowse={canBrowsePicture}
-                  canOpen={canOpenPicture}
-                  compact
-                  picturePath={picturePath}
-                  previewSrc={picturePreviewSrc}
-                  previewState={picturePreviewState}
-                  onBrowse={() => {
-                    void handleBrowsePicture();
-                  }}
-                  onOpen={() => {
-                    void handleOpenPicture();
-                  }}
-                  onPreviewError={handlePreviewError}
-                  onPreviewLoad={handlePreviewLoad}
-                />
+                <PicturePreviewPanel compact picturePath={picturePath} preview={picturePreview} />
               ) : null}
 
               <div className={cn(showSidebarPicturePreview ? "mt-4" : "")}>
@@ -339,12 +228,9 @@ export function EntryDialog({ defaultArchived = false, mode, onClose, onSave, re
                 </div>
 
                 <div className="mt-4 space-y-4">
-                  <ContextRow label="Entry ID" value={entry.id} />
-                  <ContextRow label="Created" value={entry.createdAt || "-"} />
-                  <ContextRow label="Updated" value={entry.updatedAt || "-"} />
-                  <ContextRow label="Status" value={entry.archived ? "Archived" : "Inventory"} />
-                  <ContextRow label="Verified" value={entry.verifiedInSurvey ? "Verified" : "Pending"} />
-                  <ContextRow label="Manual Entry" value={entry.manualEntry ? "Yes" : "No"} />
+                  {buildEntryContextRows(entry).map((row) => (
+                    <ContextRow key={row.label} label={row.label} value={row.value} />
+                  ))}
                 </div>
               </div>
             </div>
