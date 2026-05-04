@@ -1,6 +1,6 @@
 # ME Inventory
 
-Last consolidated: 2026-05-02
+Last consolidated: 2026-05-04
 
 ME Inventory is a Windows desktop inventory app built with Tauri 2, React 19, TypeScript, Vite, Tailwind CSS v4, Bun, Rust, and FeOxDB.
 
@@ -12,7 +12,7 @@ This README is the current project entry point. Detailed engineering notes live 
 
 - Active workspace: `c:\Projects\Active\ME_Inventory_App_Tauri_v2`
 - App name: `ME Inventory`
-- Display name: `ME Inventory v1.0.2`
+- Display name: `ME Inventory v1.0.3`
 - Version source: `package.json`, `backend\Cargo.toml`, and `backend\tauri.conf.json`
 - Tauri identifier: `com.me.inventory`
 - Install mode: current-user NSIS install
@@ -21,22 +21,22 @@ This README is the current project entry point. Detailed engineering notes live 
 - Shared sync: S-drive FeOx operation logs plus manifest/snapshot bootstrap
 - Deprecated local `.db` files: quarantined once into app-data backups and never used as data sources
 
-Version note: `1.0.2` is the current source truth for the signed updater target. `1.0.1` is the expected updater baseline for installed-machine smoke.
+Version note: `1.0.3` is the current source truth for the signed updater target. `1.0.2` is the expected updater baseline for installed-machine smoke.
 
 ## Current Release
 
-`1.0.2` is published as the latest GitHub Release and is staged on the shared release drive.
+`1.0.3` is staged locally and on the shared release drive. GitHub Release upload is the next release step.
 
-- GitHub Release: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v1.0.2`
+- GitHub Release: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v1.0.3`
 - Updater metadata: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/latest/download/latest.json`
-- Shared installer: `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.2\ME Inventory_1.0.2_x64-setup.exe`
-- Installer SHA-256: `54737d2589d679324c38dc90557b3daa061641bd5b96e4e60f0675b756bb957c`
-- Local staged assets: `release\v1.0.2\`
-- Release tag: `v1.0.2`
+- Shared installer: `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.3\ME Inventory_1.0.3_x64-setup.exe`
+- Installer SHA-256: `8367eb6fba86a914b8081f3583506d60816129eb71733c6b928ab07555bf8cc2`
+- Local staged assets: `release\v1.0.3\`
+- Release tag: `v1.0.3`
 
-Release validation passed on the build machine for Bun audit, frontend lint/tests/build, Rust format/check/tests, signed NSIS packaging, shared-drive staging, GitHub asset upload, and public updater metadata resolution. `cargo clippy` and `cargo audit` are still not installed locally, so those gates remain unavailable on this workstation.
+Release validation passed on the build machine for Bun audit, frontend lint/tests/build, Rust format/check/tests, one-machine shared-sync smoke, signed NSIS staging, and shared-drive staging. `cargo clippy` and `cargo audit` are still not installed locally, so those gates remain unavailable on this workstation.
 
-Manual validation still needed: install or update from `1.0.1` to `1.0.2`, confirm the visible app version, run the packaged CRUD/export/picture/link smoke, and run a real shared-drive multi-machine sync smoke.
+Manual validation still needed: publish GitHub Release `v1.0.3`, install or update from `1.0.2` to `1.0.3`, confirm the visible app version, run the packaged CRUD/export/picture/link smoke, and run a real shared-drive multi-machine sync smoke.
 
 ## Project Layout
 
@@ -322,25 +322,25 @@ Publish the generated NSIS installer, its `.sig` file, SHA-256 sums, and a GitHu
 
 ```json
 {
-  "version": "1.0.2",
+  "version": "1.0.3",
   "notes": "Release notes",
   "pub_date": "2026-05-02T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "contents of the generated .sig file",
-      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v1.0.2/ME.Inventory_1.0.2_x64-setup.exe"
+      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v1.0.3/ME.Inventory_1.0.3_x64-setup.exe"
     }
   }
 }
 ```
 
-Fresh `1.0.2` manual smoke:
+Fresh `1.0.3` manual smoke:
 
 - Confirm `package.json`, `backend\Cargo.toml`, and `backend\tauri.conf.json` versions match.
 - Confirm the app identifier is still `com.me.inventory`.
-- Update an installed `1.0.1` machine to `1.0.2`.
+- Update an installed `1.0.2` machine to `1.0.3`.
 - Launch from the installed shortcut.
-- Confirm the visible name and version are `ME Inventory v1.0.2`.
+- Confirm the visible name and version are `ME Inventory v1.0.3`.
 - On clean app data, confirm startup hydrates from the S-drive FeOx snapshot and newer operation files.
 - Close and reopen, then confirm row count stays stable.
 - Add, edit, verify, archive, restore, and delete a disposable smoke entry.
@@ -350,7 +350,7 @@ Fresh `1.0.2` manual smoke:
 - Confirm a missing picture path shows the missing state without crashing.
 - Export Excel, cancel once, then save once to a path with spaces.
 - Open the workbook and confirm exactly `Inventory` and `Archive` sheets.
-- Confirm the uploaded `1.0.2` GitHub Release assets and updater metadata, then from the installed `1.0.1` app confirm update check, download progress, install, and relaunch/update behavior.
+- Confirm the uploaded `1.0.3` GitHub Release assets and updater metadata, then from the installed `1.0.2` app confirm update check, download progress, install, and relaunch/update behavior.
 - Run a real shared-drive multi-machine smoke and confirm create/update/delete convergence plus stale-update conflict logging.
 - Confirm known old app-owned `.db` files are moved to `deprecated-db-backups` and are not loaded.
 - Record installer path, updater `.sig` path, GitHub release URL, SHA-256, commit, source version, tester, machines, result, and date.
@@ -388,7 +388,7 @@ Manual exercise:
 
 ## Open Work
 
-- Run real shared-drive multi-machine `1.0.2` update smoke from installed `1.0.1`.
+- Run real shared-drive multi-machine `1.0.3` update smoke from installed `1.0.2`.
 - Add conflict UI, locked-file smoke, and shared media storage.
 - Decide whether entries should move from the current compatibility projection to future `inventory:item:*` and ledger keyspaces.
 - Benchmark real inventory size for search, sort, startup, sync, and table rendering.

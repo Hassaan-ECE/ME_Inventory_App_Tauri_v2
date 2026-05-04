@@ -156,6 +156,45 @@ describe("InventoryShell shared sync", () => {
     }
   });
 
+  it("keeps startup loading until the initial shared sync finishes", async () => {
+    const staleLocalEntry = buildTestEntry({
+      id: "901",
+      description: "Stale local startup entry",
+      manufacturer: "Local Only Maker",
+    });
+    const syncedEntry = buildTestEntry({
+      id: "902",
+      description: "Shared startup entry",
+      manufacturer: "Shared Maker",
+    });
+    const initialSync = createDeferred<InventorySyncResult>();
+    const loadInventory = vi.fn().mockResolvedValue(buildDesktopSyncResult(CONNECTED_SHARED_STATUS, [staleLocalEntry]));
+    const syncInventory = vi.fn().mockReturnValue(initialSync.promise);
+
+    window.inventoryDesktop = createDesktopBridge({ loadInventory, syncInventory });
+
+    render(<InventoryShell />);
+
+    await waitFor(() => expect(syncInventory).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Loading inventory entries...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Inventory (0)" })).toBeInTheDocument();
+    expect(screen.queryByText("Local Only Maker")).not.toBeInTheDocument();
+
+    await act(async () => {
+      initialSync.resolve({
+        dbPath: TEST_DB_PATH,
+        entries: [syncedEntry],
+        entriesChanged: true,
+        shared: CONNECTED_SHARED_STATUS,
+      });
+      await initialSync.promise;
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("Shared Maker")).toBeInTheDocument();
+    expect(screen.queryByText("Local Only Maker")).not.toBeInTheDocument();
+  });
+
   it("pushes desktop mutations to shared sync almost immediately", async () => {
     const user = userEvent.setup();
     const entry = buildTestEntry({ description: "Delayed sync entry" });
@@ -228,8 +267,10 @@ describe("InventoryShell shared sync", () => {
 
     render(<InventoryShell />);
 
-    expect(await screen.findByText("In-flight sync entry")).toBeInTheDocument();
     await waitFor(() => expect(syncInventory).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(sharedChangeCallback).not.toBeNull());
+    expect(screen.getByText("Loading inventory entries...")).toBeInTheDocument();
+    expect(screen.queryByText("In-flight sync entry")).not.toBeInTheDocument();
 
     act(() => {
       sharedChangeCallback?.();
@@ -248,6 +289,7 @@ describe("InventoryShell shared sync", () => {
       await Promise.resolve();
     });
 
+    expect(await screen.findByText("In-flight sync entry")).toBeInTheDocument();
     await waitFor(() => expect(syncInventory).toHaveBeenCalledTimes(2));
   });
 

@@ -19,6 +19,12 @@ interface UseDesktopInventoryOptions {
   announceStatus: (message: string) => void;
 }
 
+interface RefreshDesktopEntriesOptions {
+  applyResult?: boolean;
+  keepLoading?: boolean;
+  showLoading?: boolean;
+}
+
 export function useDesktopInventory({ announceStatus }: UseDesktopInventoryOptions) {
   const [entries, setEntries] = useState<InventoryEntry[]>(() => (hasDesktopBridge() ? [] : MOCK_INVENTORY));
   const [dataSource, setDataSource] = useState<"desktop" | "mock">(() => (hasDesktopBridge() ? "desktop" : "mock"));
@@ -55,8 +61,9 @@ export function useDesktopInventory({ announceStatus }: UseDesktopInventoryOptio
   const refreshDesktopEntries = useCallback(
     async ({
       applyResult = true,
+      keepLoading = false,
       showLoading = false,
-    }: { applyResult?: boolean; showLoading?: boolean } = {}): Promise<InventorySyncResult | null> => {
+    }: RefreshDesktopEntriesOptions = {}): Promise<InventorySyncResult | null> => {
       const desktopBridge = window.inventoryDesktop;
       if (!desktopBridge?.loadInventory) {
         return null;
@@ -86,7 +93,7 @@ export function useDesktopInventory({ announceStatus }: UseDesktopInventoryOptio
         }
         return null;
       } finally {
-        if (canApplyDesktopResult(applyResult, requestId)) {
+        if (!keepLoading && canApplyDesktopResult(applyResult, requestId)) {
           setIsLoading(false);
         }
       }
@@ -177,11 +184,15 @@ export function useDesktopInventory({ announceStatus }: UseDesktopInventoryOptio
         return;
       }
 
-      const payload = await refreshDesktopEntries({ applyResult: active, showLoading: true });
+      const payload = await refreshDesktopEntries({ applyResult: active, keepLoading: true, showLoading: true });
 
       if (active && payload?.shared.enabled && !initialSyncStartedRef.current) {
         initialSyncStartedRef.current = true;
-        void syncEntriesFromDesktop({ applyResult: active });
+        await syncEntriesFromDesktop({ applyResult: active });
+      }
+
+      if (active) {
+        setIsLoading(false);
       }
     }
 

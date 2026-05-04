@@ -25,6 +25,8 @@ interface UseInventoryViewModelOptions {
   sortState: SortState;
 }
 
+const LOADING_ENTRIES: InventoryEntry[] = [];
+
 export function useInventoryViewModel({
   columnVisibility,
   entries,
@@ -34,14 +36,15 @@ export function useInventoryViewModel({
   scope,
   sortState,
 }: UseInventoryViewModelOptions) {
+  const sourceEntries = isLoading ? LOADING_ENTRIES : entries;
   const deferredQuery = useDeferredValue(query);
   const deferredFilters = useDeferredValue(filters);
   const filteredEntries = useMemo(
-    () => filterEntries(entries, scope, deferredQuery, deferredFilters),
-    [deferredFilters, deferredQuery, entries, scope],
+    () => filterEntries(sourceEntries, scope, deferredQuery, deferredFilters),
+    [deferredFilters, deferredQuery, scope, sourceEntries],
   );
   const sortedEntries = useMemo(() => sortEntries(filteredEntries, sortState), [filteredEntries, sortState]);
-  const counts = useMemo(() => getInventoryCounts(entries), [entries]);
+  const counts = useMemo(() => getInventoryCounts(sourceEntries), [sourceEntries]);
   const visibleColumns = useMemo(() => getVisibleColumns(columnVisibility), [columnVisibility]);
   const entriesById = useMemo(() => {
     const map = new Map<string, InventoryEntry>();

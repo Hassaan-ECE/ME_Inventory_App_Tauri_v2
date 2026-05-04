@@ -1,6 +1,6 @@
 # Release Evidence Checklist
 
-Last updated: 2026-05-02
+Last updated: 2026-05-04
 
 This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path. For current hardening status, use `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md`. Read `docs/engineering/AGENT_RUNBOOK.md` before release work.
 
@@ -11,20 +11,27 @@ This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path
 - `[x]` done
 - `[!]` blocked or needs decision
 
-## Current 1.0.2 Release Blockers
+## Current 1.0.3 Release Blockers
 
-- [x] Build release binary and produce `1.0.2` NSIS installer.
-- [x] Sign the produced `1.0.2` installer with the Tauri updater key.
-- [x] Stage `1.0.2` assets locally under `release\v1.0.2\`.
-- [x] Stage `1.0.2` assets on the shared release drive under `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.2\`.
-- [x] Upload `1.0.2` assets to GitHub Release `v1.0.2` and verify `releases/latest/download/latest.json`.
-- [ ] Validate installed `1.0.1` updates to signed `1.0.2`.
-- [ ] Run packaged `1.0.2` NSIS install smoke.
+- [x] Build release binary and produce `1.0.3` NSIS installer.
+- [x] Manually sign the produced `1.0.3` installer with the Tauri updater key after the NSIS wrapper hit Windows error 1224.
+- [x] Stage `1.0.3` assets locally under `release\v1.0.3\`.
+- [x] Stage `1.0.3` assets on the shared release drive under `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.3\`.
+- [~] Upload `1.0.3` assets to GitHub Release `v1.0.3` and verify `releases/latest/download/latest.json`.
+- [ ] Validate installed `1.0.2` updates to signed `1.0.3`.
+- [ ] Run packaged `1.0.3` NSIS install smoke.
 - [ ] Run real shared-drive multi-machine sync smoke.
 - [ ] Confirm packaged CSP, image preview/open behavior, and signed updater behavior.
 - [ ] Record tester, machine names, installer path, updater artifact path, GitHub release URL, SHA-256, commit, source version, result, and date.
 
-## Current 1.0.2 Evidence
+## Current 1.0.3 Evidence
+
+| Check | Date | Tester | Machine(s) | Artifact / URL | SHA-256 | Result | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `1.0.3` release validation | 2026-05-04 | Codex | Build machine | Source tree |  | Pass | Passed `node scripts\run-bun.mjs run lint`, `node scripts\run-bun.mjs run test`, `node scripts\run-bun.mjs run build`, `node scripts\run-bun.mjs audit`, backend `cargo fmt -- --check`, `cargo check`, `cargo test`, and `powershell -ExecutionPolicy Bypass -File scripts\smoke-sync-one-machine.ps1`. `cargo clippy` and `cargo audit` are still unavailable locally. |
+| `1.0.3` signed local/shared staging | 2026-05-04 | Codex | Build machine | `release\v1.0.3\`; `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.3\ME Inventory_1.0.3_x64-setup.exe` | `8367eb6fba86a914b8081f3583506d60816129eb71733c6b928ab07555bf8cc2` | Pass | Tauri NSIS bundle hit Windows error 1224 twice after compiling the release executable; the produced installer was manually signed with `tauri signer sign`. `latest.json` and `SHA256SUMS.txt` are staged locally and on the shared drive. |
+
+## Previous 1.0.2 Evidence
 
 | Check | Date | Tester | Machine(s) | Artifact / URL | SHA-256 | Result | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -156,7 +163,7 @@ This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path
 
 ## Notes
 
-- `1.0.2` still needs installed updater smoke from `1.0.1` after GitHub Release asset upload.
+- `1.0.3` still needs GitHub Release asset upload and installed updater smoke from `1.0.2`.
 - Real two-machine smoke still needs to validate snapshot bootstrap, operation compaction, fast convergence, and field-level merge on the S-drive.
 
 ## Current Artifact Paths
