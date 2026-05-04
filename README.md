@@ -25,7 +25,7 @@ Version note: `1.0.3` is the current source truth for the signed updater target.
 
 ## Current Release
 
-`1.0.3` is staged locally and on the shared release drive. GitHub Release upload is the next release step.
+`1.0.3` is published as the latest GitHub Release and is staged on the shared release drive.
 
 - GitHub Release: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v1.0.3`
 - Updater metadata: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/latest/download/latest.json`
@@ -34,9 +34,9 @@ Version note: `1.0.3` is the current source truth for the signed updater target.
 - Local staged assets: `release\v1.0.3\`
 - Release tag: `v1.0.3`
 
-Release validation passed on the build machine for Bun audit, frontend lint/tests/build, Rust format/check/tests, one-machine shared-sync smoke, signed NSIS staging, and shared-drive staging. `cargo clippy` and `cargo audit` are still not installed locally, so those gates remain unavailable on this workstation.
+Release validation passed on the build machine for Bun audit, frontend lint/tests/build, Rust format/check/tests, one-machine shared-sync smoke, signed NSIS staging, shared-drive staging, GitHub asset upload, and public updater metadata resolution. `cargo clippy` and `cargo audit` are still not installed locally, so those gates remain unavailable on this workstation.
 
-Manual validation still needed: publish GitHub Release `v1.0.3`, install or update from `1.0.2` to `1.0.3`, confirm the visible app version, run the packaged CRUD/export/picture/link smoke, and run a real shared-drive multi-machine sync smoke.
+Manual validation still needed: install or update from `1.0.2` to `1.0.3`, confirm the visible app version, run the packaged CRUD/export/picture/link smoke, and run a real shared-drive multi-machine sync smoke.
 
 ## Project Layout
 
