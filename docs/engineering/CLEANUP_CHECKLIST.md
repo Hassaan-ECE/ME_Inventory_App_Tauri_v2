@@ -20,7 +20,7 @@ This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path
 - [x] Stage `1.0.4` assets locally under `release\v1.0.4\`.
 - [x] Stage the current installer at `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME\ME Inventory_1.0.4_x64-setup.exe`.
 - [x] Move support files on the shared drive into `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME\release-support\v1.0.4\` so the ME root has only the installer `.exe` plus folders.
-- [ ] Upload `1.0.4` assets to GitHub Release `v1.0.4` and verify `releases/latest/download/latest.json`.
+- [x] Upload `1.0.4` assets to GitHub Release `v1.0.4` and verify `releases/latest/download/latest.json`.
 - [ ] Validate installed `1.0.3` updates to signed `1.0.4`.
 - [ ] Run packaged `1.0.4` NSIS install smoke.
 - [ ] Run real shared-drive multi-machine sync smoke.
@@ -35,6 +35,7 @@ This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `1.0.4` release validation | 2026-05-11 | Codex | Build machine | Source tree |  | Pass | Passed `node scripts\run-bun.mjs run lint`, `node scripts\run-bun.mjs run test`, `node scripts\run-bun.mjs run build`, `node scripts\run-bun.mjs audit`, backend `cargo fmt -- --check`, backend `cargo check`, backend `cargo test`, signed `node scripts\run-bun.mjs run build:desktop`, `powershell -ExecutionPolicy Bypass -File scripts\smoke-sync-one-machine.ps1`, and `git diff --check`. |
 | `1.0.4` signed local/shared staging | 2026-05-11 | Codex | Build machine | `release\v1.0.4\`; `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME\ME Inventory_1.0.4_x64-setup.exe`; `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME\release-support\v1.0.4\` | `2d5a2b7de58d2887047caf59ff155219a606636bbae06847b533d0ac10e722f9` | Pass | Root ME folder contains only the current `1.0.4` installer plus `release-support\` and `shared\` folders. The old root `1.0.3` installer was moved under `release-support\v1.0.3\`. |
+| `1.0.4` GitHub Release asset upload | 2026-05-11 | Codex | GitHub | `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v1.0.4` | `2d5a2b7de58d2887047caf59ff155219a606636bbae06847b533d0ac10e722f9` | Pass | Uploaded `latest.json`, installer, `.sig`, and `SHA256SUMS.txt`; `releases/latest/download/latest.json` resolves to `1.0.4`, the installer URL returns HTTP 200, and the release targets commit `4abde9cacdbacdde9d95b79245dcd183d40b74b2`. |
 | Old Manufacturing shared root archived | 2026-05-11 | Codex | Build machine | `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME_ARCHIVED_DO_NOT_USE_20260511-142114\` |  | Pass | Original `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\` path no longer exists, so stale clients pinned to that old sync root fail visibly instead of syncing old data. |
 
 ## Previous 1.0.3 Evidence

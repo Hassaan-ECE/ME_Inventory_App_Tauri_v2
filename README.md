@@ -26,7 +26,7 @@ Version note: `1.0.4` is the current source truth for the signed updater target.
 
 ## Current Release
 
-`1.0.4` is the current release candidate for the Engineering/Public shared-root cutoff. It keeps `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME` as the only active shared root and intentionally strands stale clients that still point at the old Manufacturing root.
+`1.0.4` is published as the current release for the Engineering/Public shared-root cutoff. It keeps `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME` as the only active shared root and intentionally strands stale clients that still point at the old Manufacturing root.
 
 - GitHub Release: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v1.0.4`
 - Updater metadata: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/latest/download/latest.json`
@@ -35,7 +35,7 @@ Version note: `1.0.4` is the current source truth for the signed updater target.
 - Local staged assets: `release\v1.0.4\`
 - Release tag: `v1.0.4`
 
-Release build/staging validation for `1.0.4` passed on the build machine for frontend lint/tests/build, Bun audit, Rust format/check/test, one-machine shared-sync smoke, signed NSIS build, local release staging, Engineering shared-drive staging, and old Manufacturing shared-root archival. Manual installed-updater and multi-machine sync smoke are still pending. The previous `1.0.3` validation passed for GitHub asset upload and public updater metadata checks. `cargo clippy` and `cargo audit` are still not installed locally, so those gates remain unavailable on this workstation.
+Release validation for `1.0.4` passed on the build machine for frontend lint/tests/build, Bun audit, Rust format/check/test, one-machine shared-sync smoke, signed NSIS build, local release staging, Engineering shared-drive staging, GitHub asset upload, public updater metadata resolution, and old Manufacturing shared-root archival. Manual installed-updater and multi-machine sync smoke are still pending. `cargo clippy` and `cargo audit` are still not installed locally, so those gates remain unavailable on this workstation.
 
 Manual validation still needed: install or update from `1.0.3` to `1.0.4`, confirm the visible app version, run the packaged CRUD/export/picture/link smoke, and run a real shared-drive multi-machine sync smoke against the Engineering/Public shared root.
 

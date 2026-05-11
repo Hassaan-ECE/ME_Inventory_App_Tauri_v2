@@ -249,9 +249,9 @@ Acceptance criteria:
 
 ### 11. Manual Smoke Before Release
 
-- [ ] Run one-machine shared-sync smoke:
+- [x] Run one-machine shared-sync smoke:
   - `powershell -ExecutionPolicy Bypass -File scripts\smoke-sync-one-machine.ps1`
-- [ ] Build the packaged desktop app.
+- [x] Build the packaged desktop app.
 - [ ] Run packaged NSIS install smoke.
 - [ ] Validate installed `1.0.3` updates to signed `1.0.4`, or adjust the version path to the current release plan.
 - [ ] Run real shared-drive multi-machine sync smoke.
