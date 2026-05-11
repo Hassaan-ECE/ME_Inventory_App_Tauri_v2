@@ -1,6 +1,6 @@
 # FeOxDB Shared Sync Notes
 
-Last updated: 2026-05-02
+Last updated: 2026-05-11
 
 Status: implemented as the current `1.0.0` storage/sync design. Keep this file as the compact design note; use `CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md` for hardening status and release gates.
 
@@ -16,13 +16,19 @@ Status: implemented as the current `1.0.0` storage/sync design. Keep this file a
 Shared layout:
 
 ```text
-S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\shared\inventory\
-  manifest.json
-  ops\<client-id>\000000000001.op.json
-  snapshots\snapshot-*.snapshot.json
-  locks\snapshot.lock
-  backups\
+S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME\
+  ME Inventory_1.0.4_x64-setup.exe
+  release-support\
+    v1.0.4\
+  shared\inventory\
+    manifest.json
+    ops\<client-id>\000000000001.op.json
+    snapshots\snapshot-*.snapshot.json
+    locks\snapshot.lock
+    backups\
 ```
+
+The ME root is intentionally click-obvious for installers: keep the current NSIS installer `.exe` at the root and put signatures, checksums, updater metadata, old installers, and other support files under folders. Shared sync state belongs under `shared\inventory\`, not next to the installer.
 
 ## Sync Behavior
 

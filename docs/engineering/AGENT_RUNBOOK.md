@@ -1,6 +1,6 @@
 # Agent Runbook
 
-Last updated: 2026-05-02
+Last updated: 2026-05-08
 
 Use this file before release or cleanup work in this repo. It records project-specific traps, pivots that worked, and fixes still worth doing.
 
@@ -87,6 +87,14 @@ rustup component add rustfmt
 - `gh` is not installed on this workstation as of 2026-04-30.
 - Stage installer, `.sig`, SHA-256 sums, and `latest.json` locally under an ignored `release\vX.Y.Z\` folder.
 - Upload those assets manually to a non-draft, non-prerelease GitHub Release tagged `vX.Y.Z`, then validate the app updater against the real GitHub metadata URL.
+
+### Shared Drive Staging
+
+- Current shared root: `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME`.
+- Keep the shared root obvious for installers: put only the current NSIS installer `.exe` at the root.
+- Put updater metadata, `.sig` files, SHA-256 sums, previous installers, and other support material under folders such as `release-support\vX.Y.Z\` or `archive\`.
+- Shared sync state belongs under `shared\inventory\`, with manifest, operation logs, snapshots, locks, and backups below that folder.
+- The app fallback shared root is hardcoded in `backend/src/sync/types.rs`; update that constant if the shared root moves again.
 
 ### Untracked Source Files
 

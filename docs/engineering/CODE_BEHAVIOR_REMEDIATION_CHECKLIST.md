@@ -253,7 +253,7 @@ Acceptance criteria:
   - `powershell -ExecutionPolicy Bypass -File scripts\smoke-sync-one-machine.ps1`
 - [ ] Build the packaged desktop app.
 - [ ] Run packaged NSIS install smoke.
-- [ ] Validate installed `1.0.2` updates to signed `1.0.3`, or adjust the version path to the current release plan.
+- [ ] Validate installed `1.0.3` updates to signed `1.0.4`, or adjust the version path to the current release plan.
 - [ ] Run real shared-drive multi-machine sync smoke.
 - [ ] Run real legacy SQLite import smoke if legacy import remains release-relevant.
 - [ ] Confirm image preview/open behavior in the packaged app.

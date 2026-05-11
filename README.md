@@ -1,6 +1,6 @@
 # ME Inventory
 
-Last consolidated: 2026-05-04
+Last consolidated: 2026-05-11
 
 ME Inventory is a Windows desktop inventory app built with Tauri 2, React 19, TypeScript, Vite, Tailwind CSS v4, Bun, Rust, and FeOxDB.
 
@@ -12,31 +12,32 @@ This README is the current project entry point. Detailed engineering notes live 
 
 - Active workspace: `c:\Projects\Active\ME_Inventory_App_Tauri_v2`
 - App name: `ME Inventory`
-- Display name: `ME Inventory v1.0.3`
+- Display name: `ME Inventory v1.0.4`
 - Version source: `package.json`, `backend\Cargo.toml`, and `backend\tauri.conf.json`
 - Tauri identifier: `com.me.inventory`
 - Install mode: current-user NSIS install
 - Updater: signed Tauri updater with GitHub Releases static metadata
 - Runtime database: local FeOxDB file named `inventory.feox`
-- Shared sync: S-drive FeOx operation logs plus manifest/snapshot bootstrap
+- Shared drive root: `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME`
+- Shared sync: S-drive FeOx operation logs plus manifest/snapshot bootstrap under `shared\inventory`
 - Deprecated local `.db` files: quarantined once into app-data backups and never used as data sources
 
-Version note: `1.0.3` is the current source truth for the signed updater target. `1.0.2` is the expected updater baseline for installed-machine smoke.
+Version note: `1.0.4` is the current source truth for the signed updater target. `1.0.3` is the expected updater baseline for installed-machine smoke.
 
 ## Current Release
 
-`1.0.3` is published as the latest GitHub Release and is staged on the shared release drive.
+`1.0.4` is the current release candidate for the Engineering/Public shared-root cutoff. It keeps `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME` as the only active shared root and intentionally strands stale clients that still point at the old Manufacturing root.
 
-- GitHub Release: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v1.0.3`
+- GitHub Release: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/tag/v1.0.4`
 - Updater metadata: `https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/latest/download/latest.json`
-- Shared installer: `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases\1.0.3\ME Inventory_1.0.3_x64-setup.exe`
-- Installer SHA-256: `8367eb6fba86a914b8081f3583506d60816129eb71733c6b928ab07555bf8cc2`
-- Local staged assets: `release\v1.0.3\`
-- Release tag: `v1.0.3`
+- Shared installer: `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME\ME Inventory_1.0.4_x64-setup.exe`
+- Installer SHA-256: `2d5a2b7de58d2887047caf59ff155219a606636bbae06847b533d0ac10e722f9`
+- Local staged assets: `release\v1.0.4\`
+- Release tag: `v1.0.4`
 
-Release validation passed on the build machine for Bun audit, frontend lint/tests/build, Rust format/check/tests, one-machine shared-sync smoke, signed NSIS staging, shared-drive staging, GitHub asset upload, and public updater metadata resolution. `cargo clippy` and `cargo audit` are still not installed locally, so those gates remain unavailable on this workstation.
+Release build/staging validation for `1.0.4` passed on the build machine for frontend lint/tests/build, Bun audit, Rust format/check/test, one-machine shared-sync smoke, signed NSIS build, local release staging, Engineering shared-drive staging, and old Manufacturing shared-root archival. Manual installed-updater and multi-machine sync smoke are still pending. The previous `1.0.3` validation passed for GitHub asset upload and public updater metadata checks. `cargo clippy` and `cargo audit` are still not installed locally, so those gates remain unavailable on this workstation.
 
-Manual validation still needed: install or update from `1.0.2` to `1.0.3`, confirm the visible app version, run the packaged CRUD/export/picture/link smoke, and run a real shared-drive multi-machine sync smoke.
+Manual validation still needed: install or update from `1.0.3` to `1.0.4`, confirm the visible app version, run the packaged CRUD/export/picture/link smoke, and run a real shared-drive multi-machine sync smoke against the Engineering/Public shared root.
 
 ## Project Layout
 
@@ -141,7 +142,28 @@ This is a compatibility projection for the existing ME Lab Inventory workflow. I
 - Clients do not mutate one shared FeOxDB file.
 - Shared root resolution:
   - `ME_LAB_SHARED_ROOT`
-  - fallback: `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME`
+  - fallback: `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME`
+- Shared-drive root layout should keep the installer obvious:
+
+```text
+S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME\
+  ME Inventory_1.0.4_x64-setup.exe
+  release-support\
+    v1.0.4\
+      latest.json
+      ME Inventory_1.0.4_x64-setup.exe.sig
+      SHA256SUMS.txt
+  shared\
+    inventory\
+      manifest.json
+      ops\
+      snapshots\
+      locks\
+      backups\
+```
+
+- The shared root should contain only the current installer executable and clearly named folders. Put updater metadata, signatures, checksums, old installers, and other support files inside folders such as `release-support\` or `archive\` so a user opening the root has an obvious installer to click.
+- Shared sync data belongs under `shared\inventory\`, not beside the installer.
 - Operation files are written under:
 
 ```text
@@ -316,31 +338,31 @@ Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY
 Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ```
 
-Shared-release staging uses `S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME\releases`. Before replacing release artifacts, back up any current shared metadata or installer folders that are still needed for rollback evidence.
+Shared-drive staging uses `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME`. Keep the root click-obvious: place only the current NSIS installer `.exe` at the root, and put support files under `release-support\vX.Y.Z\`. Before replacing release artifacts, back up any current shared metadata or installer folders that are still needed for rollback evidence.
 
-Publish the generated NSIS installer, its `.sig` file, SHA-256 sums, and a GitHub Release asset named `latest.json`. If `gh` is unavailable on the workstation, upload the staged files manually to a non-draft, non-prerelease GitHub Release. Static updater metadata must include the Tauri updater fields for the Windows platform:
+Publish the generated NSIS installer, its `.sig` file, SHA-256 sums, and a GitHub Release asset named `latest.json`. On the shared drive, keep the installer `.exe` at the ME root and keep `.sig`, `latest.json`, SHA-256 sums, and other support material under `release-support\vX.Y.Z\`. If `gh` is unavailable on the workstation, upload the staged files manually to a non-draft, non-prerelease GitHub Release. Static updater metadata must include the Tauri updater fields for the Windows platform:
 
 ```json
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "notes": "Release notes",
   "pub_date": "2026-05-02T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "contents of the generated .sig file",
-      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v1.0.3/ME.Inventory_1.0.3_x64-setup.exe"
+      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v1.0.4/ME.Inventory_1.0.4_x64-setup.exe"
     }
   }
 }
 ```
 
-Fresh `1.0.3` manual smoke:
+Fresh `1.0.4` manual smoke:
 
 - Confirm `package.json`, `backend\Cargo.toml`, and `backend\tauri.conf.json` versions match.
 - Confirm the app identifier is still `com.me.inventory`.
-- Update an installed `1.0.2` machine to `1.0.3`.
+- Update an installed `1.0.3` machine to `1.0.4`.
 - Launch from the installed shortcut.
-- Confirm the visible name and version are `ME Inventory v1.0.3`.
+- Confirm the visible name and version are `ME Inventory v1.0.4`.
 - On clean app data, confirm startup hydrates from the S-drive FeOx snapshot and newer operation files.
 - Close and reopen, then confirm row count stays stable.
 - Add, edit, verify, archive, restore, and delete a disposable smoke entry.
@@ -350,9 +372,10 @@ Fresh `1.0.3` manual smoke:
 - Confirm a missing picture path shows the missing state without crashing.
 - Export Excel, cancel once, then save once to a path with spaces.
 - Open the workbook and confirm exactly `Inventory` and `Archive` sheets.
-- Confirm the uploaded `1.0.3` GitHub Release assets and updater metadata, then from the installed `1.0.2` app confirm update check, download progress, install, and relaunch/update behavior.
+- Confirm the uploaded `1.0.4` GitHub Release assets and updater metadata, then from the installed `1.0.3` app confirm update check, download progress, install, and relaunch/update behavior.
 - Run a real shared-drive multi-machine smoke and confirm create/update/delete convergence plus stale-update conflict logging.
 - Confirm known old app-owned `.db` files are moved to `deprecated-db-backups` and are not loaded.
+- Confirm the shared root has one obvious installer `.exe` at `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME\` and sync data under `shared\inventory\`.
 - Record installer path, updater `.sig` path, GitHub release URL, SHA-256, commit, source version, tester, machines, result, and date.
 
 Known release caveats:
@@ -388,7 +411,7 @@ Manual exercise:
 
 ## Open Work
 
-- Run real shared-drive multi-machine `1.0.3` update smoke from installed `1.0.2`.
+- Run real shared-drive multi-machine `1.0.4` update smoke from installed `1.0.3`.
 - Add conflict UI, locked-file smoke, and shared media storage.
 - Decide whether entries should move from the current compatibility projection to future `inventory:item:*` and ledger keyspaces.
 - Benchmark real inventory size for search, sort, startup, sync, and table rendering.

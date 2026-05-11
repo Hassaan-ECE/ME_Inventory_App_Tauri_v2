@@ -6,7 +6,7 @@ use crate::model::{InventoryEntry, InventorySharedStatus};
 
 pub(crate) const SHARED_ROOT_ENV: &str = "ME_LAB_SHARED_ROOT";
 pub(crate) const DEFAULT_SHARED_ROOT: &str =
-    r"S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME";
+    r"S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME";
 pub(crate) const SYNC_SCHEMA_VERSION: u16 = 1;
 
 pub(super) const OP_FILE_SUFFIX: &str = ".op.json";
