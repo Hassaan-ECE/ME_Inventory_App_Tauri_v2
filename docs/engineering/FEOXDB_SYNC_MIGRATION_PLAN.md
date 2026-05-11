@@ -2,16 +2,17 @@
 
 Last updated: 2026-05-11
 
-Status: implemented as the current `1.0.0` storage/sync design. Keep this file as the compact design note; use `CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md` for hardening status and release gates.
+Status: implemented and shipped in the current `1.0.4` Engineering shared-root release. Keep this file as the compact design note; use `README.md` for current release state and bug-fix handoff.
 
 ## Current Shape
 
-`1.0.0` is the FeOxDB-only cutover:
+Current `1.0.4` shape:
 
 - each machine owns one local `inventory.feox`
 - the S-drive is sync transport, not a database file
 - shared sync uses operation files, snapshots, a manifest, locks, and backups
 - old app-owned `.db` files are quarantined locally and are not import sources
+- the old Manufacturing shared root is archived so stale clients fail visibly instead of syncing stale data
 
 Shared layout:
 
@@ -55,12 +56,23 @@ Result:
 - no duplicate row is created
 - overlapping edits still use newer-operation-wins behavior and record a stale conflict
 
-## Release Acceptance Still To Run
+## Current Validation
 
-Before treating `1.0.0` as shipped:
+Completed for `1.0.4`:
 
-- update two installed `0.9.9` machines to `1.0.0`
-- confirm both preserve their local `inventory.feox`
+- build-machine frontend lint/tests/build
+- Bun audit
+- Rust format/check/test
+- one-machine shared sync smoke
+- signed NSIS build
+- Engineering shared-drive staging
+- GitHub release asset upload and updater metadata resolution
+- old Manufacturing shared-root archival
+- user-confirmed installed update/cross-user smoke after release
+
+Still worth running before the next release or when investigating sync bugs:
+
+- confirm both machines preserve their local `inventory.feox`
 - confirm a clean profile hydrates from `manifest.json`, snapshot, and newer ops
 - confirm create/update/delete/archive/verify converges both ways
 - confirm different-field concurrent edits merge

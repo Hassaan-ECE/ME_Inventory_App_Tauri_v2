@@ -131,13 +131,14 @@ This document maps the project files to their responsibilities. It covers tracke
 | Path | Handles |
 | --- | --- |
 | `docs/engineering/AGENT_RUNBOOK.md` | Project-specific runbook for release, cleanup, build traps, shared drive staging, and recurring fixes. |
-| `docs/engineering/CLEANUP_CHECKLIST.md` | Historical release evidence checklist and current release validation records. |
-| `docs/engineering/CODE_BEHAVIOR_AUDIT.md` | Audit notes for code behavior risks and observations. |
-| `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md` | Remediation tracker for sync, recovery, HMAC, validation, and release quality gates. |
-| `docs/engineering/DONE_CHECKLIST.md` | Historical completion log of major implementation and release tasks. |
 | `docs/engineering/FEOXDB_SYNC_MIGRATION_PLAN.md` | Compact design note for the FeOxDB operation-log sync architecture and shared layout. |
 | `docs/engineering/SYNC_RECOVERY_INVARIANTS.md` | Explicit recovery invariants for local outbox, markers, tombstones, snapshots, and sequence state. |
 | `docs/engineering/PROJECT_FOLDER_BREAKDOWN.md` | This file: annotated map of project folders and tracked files. |
+| `docs/engineering/archive/README.md` | Explains which archived engineering docs are historical evidence and which active docs to read first. |
+| `docs/engineering/archive/CLEANUP_CHECKLIST.md` | Archived release evidence checklist and version-by-version staging records. |
+| `docs/engineering/archive/CODE_BEHAVIOR_AUDIT.md` | Archived audit notes for code behavior risks and observations. |
+| `docs/engineering/archive/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md` | Archived remediation tracker for sync, recovery, HMAC, validation, and release quality gates. |
+| `docs/engineering/archive/DONE_CHECKLIST.md` | Archived completion log of major implementation and release tasks. |
 | `docs/performance/PERFORMANCE_BASELINE.md` | Recorded performance baseline notes and guidance for rerunning baseline tests. |
 
 ## Frontend App Shell
@@ -298,4 +299,3 @@ This document maps the project files to their responsibilities. It covers tracke
 | `node_modules/` | Installed JavaScript dependencies. |
 | `release/` | Local release staging artifacts such as installers, signatures, and checksums. |
 | `resources/data/` | Local resource data folder present in the workspace; no tracked files are currently listed under it. |
-

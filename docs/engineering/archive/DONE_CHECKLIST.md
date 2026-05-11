@@ -2,7 +2,7 @@
 
 Last updated: 2026-04-30
 
-Historical archive of completed cleanup work, old release notes, worker logs, validation baselines, and deferred roadmap captured before the fresh `0.9.x` release-smoke reset. Commands, versions, and paths in this file are evidence from past work, not current instructions. Current release blockers live in `docs/engineering/CLEANUP_CHECKLIST.md`; current hardening status lives in `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md`.
+Archived note: this is completed cleanup work, old release notes, worker logs, validation baselines, and deferred roadmap captured before the fresh `0.9.x` release-smoke reset. Commands, versions, and paths in this file are evidence from past work, not current instructions. Current release state lives in `README.md`; current build/release traps live in `docs/engineering/AGENT_RUNBOOK.md`.
 
 Read `docs/engineering/AGENT_RUNBOOK.md` before starting cleanup work. The runbook records command pivots, known blockers, worker rules, and troubleshooting notes. Update it whenever an agent hits a new trap or finds a better route.
 

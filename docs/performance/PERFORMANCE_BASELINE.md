@@ -1,6 +1,6 @@
 # Performance Baseline
 
-Captured: 2026-05-01 for the FeOxDB-only `1.0.0` cleanup
+Captured: 2026-05-01 during the FeOxDB-only cleanup
 
 Historical note: these numbers describe the last recorded baseline. Rerun the ignored backend and frontend performance baselines before treating them as release evidence for a new candidate.
 
@@ -28,7 +28,7 @@ The backend baseline measures FeOxDB `load_entries`, a `query_inventory` equival
 | Synthetic 1k | 1,000 | 13.196 ms / 16.490 ms | 17.017 ms / 18.295 ms | 3.637 ms / 4.193 ms |
 | Synthetic 10k | 10,000 | 141.043 ms / 144.067 ms | 216.612 ms / 250.413 ms | 55.854 ms / 63.877 ms |
 
-The backend harness no longer imports any legacy database fixture. Rerun the ignored benchmark before publishing fresh numbers for `1.0.0`.
+The backend harness no longer imports any legacy database fixture. Rerun the ignored benchmark before publishing fresh performance numbers for a new release.
 
 ## Frontend
 

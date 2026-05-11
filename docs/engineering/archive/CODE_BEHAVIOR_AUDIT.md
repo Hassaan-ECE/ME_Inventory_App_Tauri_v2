@@ -2,7 +2,7 @@
 
 Date: 2026-05-01
 
-Historical note: this audit records the source-inspection findings that started the hardening pass. Several findings have since been remediated or partially remediated. Use `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md` for current status and remaining release gates.
+Archived note: this audit records the source-inspection findings that started the hardening pass. Several findings have since been remediated or partially remediated. Use `README.md` for current release state and `docs/engineering/FEOXDB_SYNC_MIGRATION_PLAN.md` for current shared-sync architecture.
 
 Scope: high-risk source-code audit of the Tauri inventory app. This report is based on code inspection and commands run in this working tree. README and existing docs were not used as evidence for behavior claims.
 

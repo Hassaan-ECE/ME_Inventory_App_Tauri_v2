@@ -6,7 +6,7 @@ ME Inventory is a Windows desktop inventory app built with Tauri 2, React 19, Ty
 
 Built by Syed Hassaan Shah.
 
-This README is the current project entry point. Detailed engineering notes live under `docs/engineering/`; release evidence and audit notes there may be historical, so prefer this file and `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md` for current handoff state.
+This README is the current project entry point. Keep current setup, runtime behavior, release flow, and bug-fix handoff here. Old audit, cleanup, and release logs live under `docs/engineering/archive/` and are evidence only.
 
 ## Current Source Truth
 
@@ -22,7 +22,7 @@ This README is the current project entry point. Detailed engineering notes live 
 - Shared sync: S-drive FeOx operation logs plus manifest/snapshot bootstrap under `shared\inventory`
 - Deprecated local `.db` files: quarantined once into app-data backups and never used as data sources
 
-Version note: `1.0.4` is the current source truth for the signed updater target. `1.0.3` is the expected updater baseline for installed-machine smoke.
+Version note: `1.0.4` is the current source truth and installed release. A basic installed update/cross-user smoke was confirmed on 2026-05-11 after the Engineering shared-root cutover.
 
 ## Current Release
 
@@ -35,27 +35,27 @@ Version note: `1.0.4` is the current source truth for the signed updater target.
 - Local staged assets: `release\v1.0.4\`
 - Release tag: `v1.0.4`
 
-Release validation for `1.0.4` passed on the build machine for frontend lint/tests/build, Bun audit, Rust format/check/test, one-machine shared-sync smoke, signed NSIS build, local release staging, Engineering shared-drive staging, GitHub asset upload, public updater metadata resolution, and old Manufacturing shared-root archival. Manual installed-updater and multi-machine sync smoke are still pending. `cargo clippy` and `cargo audit` are still not installed locally, so those gates remain unavailable on this workstation.
+Release validation for `1.0.4` passed on the build machine for frontend lint/tests/build, Bun audit, Rust format/check/test, one-machine shared-sync smoke, signed NSIS build, local release staging, Engineering shared-drive staging, GitHub asset upload, public updater metadata resolution, and old Manufacturing shared-root archival. A user-confirmed installed update/cross-user smoke passed after release. `cargo clippy` and `cargo audit` are still not installed locally, so those gates remain unavailable on this workstation.
 
-Manual validation still needed: install or update from `1.0.3` to `1.0.4`, confirm the visible app version, run the packaged CRUD/export/picture/link smoke, and run a real shared-drive multi-machine sync smoke against the Engineering/Public shared root.
+Manual validation still worth running before the next release: packaged CRUD/export/picture/link smoke and a full two-machine create/update/archive/delete sync smoke against the Engineering/Public shared root.
 
 ## Project Layout
 
 ```text
 frontend/     React/Vite UI, frontend tests, UI assets, and Tauri bridge code
 backend/      Tauri/Rust app, commands, storage, sync, export, import, and native helpers
-docs/         Engineering runbooks, cleanup checklists, and performance baselines
+docs/         Current engineering notes, archived evidence, and performance baselines
 scripts/      Smoke/manual automation scripts
 ```
 
 ## Doc Map
 
-- `README.md`: current setup, runtime behavior, release checklist, and open work.
-- `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md`: active hardening status and remaining release gates.
+- `README.md`: current setup, runtime behavior, release checklist, bug-fix handoff, and open work.
+- `docs/engineering/AGENT_RUNBOOK.md`: build/release traps, validation commands, and repo-specific workflow notes.
 - `docs/engineering/SYNC_RECOVERY_INVARIANTS.md`: local sync recovery rules.
-- `docs/engineering/FEOXDB_SYNC_MIGRATION_PLAN.md`: FeOxDB shared-sync design and acceptance checklist.
-- `docs/engineering/CODE_BEHAVIOR_AUDIT.md`: historical source audit that started the hardening pass.
-- `docs/engineering/CLEANUP_CHECKLIST.md` and `DONE_CHECKLIST.md`: historical release evidence and cleanup logs.
+- `docs/engineering/FEOXDB_SYNC_MIGRATION_PLAN.md`: FeOxDB shared-sync design, current shared layout, and remaining sync risks.
+- `docs/engineering/PROJECT_FOLDER_BREAKDOWN.md`: annotated map of tracked project files.
+- `docs/engineering/archive/`: historical release evidence, old audit notes, remediation logs, and completed cleanup records.
 
 ## What Works Now
 
@@ -107,7 +107,7 @@ This is a compatibility projection for the existing ME Lab Inventory workflow. I
 - Entries are stored under `entry:{entry_uuid}`.
 - Metadata stores next numeric entry ID, sync identity, local sequence state, snapshot state, outbox records, applied operation markers, entry sync state, tombstones, conflicts, and corrupt remote-file records.
 - Startup opens `inventory.feox` directly and does not inspect any legacy database files.
-- On first `1.0.0` startup, known old app-owned `.db` files are moved to `deprecated-db-backups` under app data.
+- On first supported startup after the FeOxDB-only cutover, known old app-owned `.db` files are moved to `deprecated-db-backups` under app data.
 - Normal commands read and write FeOxDB only; load, query, export, mutation, and sync paths do not inspect any other database format.
 
 ### Native Links And Pictures
@@ -136,7 +136,7 @@ This is a compatibility projection for the existing ME Lab Inventory workflow. I
 
 ### Shared Sync Foundation
 
-`0.9.7` moved normal shared workflow to local FeOxDB plus S-drive operation logs. `0.9.8` made FeOxDB shared sync near-live. `0.9.9` showed local FeOxDB rows before shared sync and published saved changes from a backend background task. `1.0.0` removes the old database import path and makes FeOxDB snapshots plus operation logs the clean-install bootstrap path.
+Current `1.0.4` sync uses local FeOxDB on each machine plus shared operation logs, snapshots, and a manifest under the Engineering S-drive root. The old Manufacturing shared root has been archived so stale clients fail visibly instead of syncing old data.
 
 - Each installation owns its local FeOxDB file.
 - Clients do not mutate one shared FeOxDB file.
@@ -299,6 +299,28 @@ The React bridge calls these commands:
 
 `query_inventory` currently range-scans FeOxDB entries in memory, then applies scope, search, filters, sort, offset, and limit. That fits the current dataset. Add secondary indexes, cached normalized search text, or server-side pagination if the inventory grows enough to make scans or table rendering slow.
 
+## Bug-Fix Handoff
+
+When debugging a future bug, first capture the app version, Windows user, whether the installed app or dev app is running, and the local database path:
+
+```powershell
+whoami
+Get-Item "$env:APPDATA\com.me.inventory\inventory.feox" -ErrorAction SilentlyContinue
+Get-ChildItem Env:ME_LAB_SHARED_ROOT,Env:ME_INVENTORY_SYNC_HMAC_KEY -ErrorAction SilentlyContinue
+Test-Path "S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME\shared\inventory"
+Test-Path "S:\Manufacturing\Internal\_Syed_H_Shah\InventoryApps\ME"
+```
+
+Expected production state:
+
+- installed app version is `1.0.4` or newer
+- Engineering shared inventory path returns `True`
+- old Manufacturing root returns `False`
+- `ME_LAB_SHARED_ROOT` is unset unless intentionally testing a non-production root
+- each user has their own local `%APPDATA%\com.me.inventory\inventory.feox`
+
+Only rename a user's local `inventory.feox` during stale-data testing after the app is closed and after taking note of the original timestamp/size. Normal fixes should preserve the local DB and let sync converge.
+
 ## Release Checklist
 
 Before building a release candidate:
@@ -344,25 +366,25 @@ Publish the generated NSIS installer, its `.sig` file, SHA-256 sums, and a GitHu
 
 ```json
 {
-  "version": "1.0.4",
+  "version": "X.Y.Z",
   "notes": "Release notes",
-  "pub_date": "2026-05-02T00:00:00Z",
+  "pub_date": "YYYY-MM-DDTHH:MM:SSZ",
   "platforms": {
     "windows-x86_64": {
       "signature": "contents of the generated .sig file",
-      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/v1.0.4/ME.Inventory_1.0.4_x64-setup.exe"
+      "url": "https://github.com/Hassaan-ECE/ME_Inventory_App_Tauri_v2/releases/download/vX.Y.Z/ME.Inventory_X.Y.Z_x64-setup.exe"
     }
   }
 }
 ```
 
-Fresh `1.0.4` manual smoke:
+Manual smoke for a new release:
 
 - Confirm `package.json`, `backend\Cargo.toml`, and `backend\tauri.conf.json` versions match.
 - Confirm the app identifier is still `com.me.inventory`.
-- Update an installed `1.0.3` machine to `1.0.4`.
+- Update an installed previous-version machine to the new version.
 - Launch from the installed shortcut.
-- Confirm the visible name and version are `ME Inventory v1.0.4`.
+- Confirm the visible name and version match the new version.
 - On clean app data, confirm startup hydrates from the S-drive FeOx snapshot and newer operation files.
 - Close and reopen, then confirm row count stays stable.
 - Add, edit, verify, archive, restore, and delete a disposable smoke entry.
@@ -372,7 +394,7 @@ Fresh `1.0.4` manual smoke:
 - Confirm a missing picture path shows the missing state without crashing.
 - Export Excel, cancel once, then save once to a path with spaces.
 - Open the workbook and confirm exactly `Inventory` and `Archive` sheets.
-- Confirm the uploaded `1.0.4` GitHub Release assets and updater metadata, then from the installed `1.0.3` app confirm update check, download progress, install, and relaunch/update behavior.
+- Confirm the uploaded GitHub Release assets and updater metadata, then from the installed previous-version app confirm update check, download progress, install, and relaunch/update behavior.
 - Run a real shared-drive multi-machine smoke and confirm create/update/delete convergence plus stale-update conflict logging.
 - Confirm known old app-owned `.db` files are moved to `deprecated-db-backups` and are not loaded.
 - Confirm the shared root has one obvious installer `.exe` at `S:\Engineering\Public\Syed_Hassaan_Shah\InventoryApps\ME\` and sync data under `shared\inventory\`.
@@ -411,7 +433,7 @@ Manual exercise:
 
 ## Open Work
 
-- Run real shared-drive multi-machine `1.0.4` update smoke from installed `1.0.3`.
+- Run full two-machine create/update/archive/delete sync smoke before the next release.
 - Add conflict UI, locked-file smoke, and shared media storage.
 - Decide whether entries should move from the current compatibility projection to future `inventory:item:*` and ledger keyspaces.
 - Benchmark real inventory size for search, sort, startup, sync, and table rendering.

@@ -1,8 +1,8 @@
 # Agent Runbook
 
-Last updated: 2026-05-08
+Last updated: 2026-05-11
 
-Use this file before release or cleanup work in this repo. It records project-specific traps, pivots that worked, and fixes still worth doing.
+Use this file before release, cleanup, or bug-fix work in this repo. It records project-specific traps, pivots that worked, and fixes still worth doing. Current release state lives in `README.md`; old release/audit evidence lives in `docs/engineering/archive/`.
 
 ## Agent Rules
 
@@ -67,7 +67,7 @@ rustup component add rustfmt
 
 - Symptom: `bun tauri build --bundles nsis` compiles the release executable, then fails during the NSIS bundle step with `The requested operation cannot be performed on a file with a user-mapped section open. (os error 1224)`.
 - Pivot: confirm no app/build processes are running, remove only the generated installer for the target version under `backend\target\release\bundle\nsis\`, then rerun the bundle command.
-- Current known case: the first `0.9.7` bundle attempt failed this way; deleting `ME Inventory_0.9.7_x64-setup.exe` and retrying produced a passing bundle.
+- Historical cases are recorded under `docs/engineering/archive/`. The `1.0.4` NSIS build completed cleanly, but keep this pivot available if the file-lock error returns.
 - Treat the installer from a failed bundle command as untrusted even if an `.exe` file exists.
 
 ### Signed Tauri Updater Key
@@ -76,17 +76,18 @@ rustup component add rustfmt
 - Public updater config lives in `backend\tauri.conf.json`.
 - Private updater signing key was generated outside the repo at `%USERPROFILE%\.tauri\me-inventory-updater.key`.
 - Public key sidecar was generated at `%USERPROFILE%\.tauri\me-inventory-updater.key.pub`.
-- Fresh `0.9.x` release-smoke work rotated the updater key on 2026-04-30 because the previously documented key files were missing locally.
+- Release-smoke work rotated the updater key on 2026-04-30 because the previously documented key files were missing locally.
 - Do not commit private key material, passwords, generated `.sig` files, release bundles, or `latest.json` drafts unless the user explicitly asks for release asset staging.
 - The current key was generated without a password after the CLI rejected the empty-password flag form. Rotate the key before broad distribution if policy requires password-protected signing keys.
-- For the current Tauri CLI, signing expects `TAURI_SIGNING_PRIVATE_KEY` to contain the private key text. `TAURI_SIGNING_PRIVATE_KEY_PATH` was not accepted during the `0.9.8` package build.
+- For the current Tauri CLI, signing expects `TAURI_SIGNING_PRIVATE_KEY` to contain the private key text. `TAURI_SIGNING_PRIVATE_KEY_PATH` was not accepted during earlier package builds.
 - Because the current key is unpassworded, set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to an explicit empty string for non-interactive builds; otherwise the signer can wait for password input after producing the NSIS installer.
 
 ### GitHub Release Upload
 
-- `gh` is not installed on this workstation as of 2026-04-30.
+- `gh` is installed and authenticated on this workstation as of the `1.0.4` release.
 - Stage installer, `.sig`, SHA-256 sums, and `latest.json` locally under an ignored `release\vX.Y.Z\` folder.
-- Upload those assets manually to a non-draft, non-prerelease GitHub Release tagged `vX.Y.Z`, then validate the app updater against the real GitHub metadata URL.
+- Upload those assets to a non-draft, non-prerelease GitHub Release tagged `vX.Y.Z`, then validate the app updater against the real GitHub metadata URL.
+- Use `gh release view vX.Y.Z --json tagName,isDraft,isPrerelease,url,targetCommitish,assets` after upload to verify asset names, hashes, and target commit.
 
 ### Shared Drive Staging
 
@@ -99,8 +100,7 @@ rustup component add rustfmt
 ### Untracked Source Files
 
 - Symptom: imports pass locally, but new source files show as `??` in `git status --short`.
-- Current audit-remediation files to include when staging include `backend/src/runtime/shared_sync.rs`, `backend/src/sync/auth.rs`, `backend/src/sync/recovery.rs`, `backend/src/sync/timestamps.rs`, `frontend/src/integrations/tauri/bridgeGuards.ts`, `frontend/tests/columns.test.ts`, `frontend/tsconfig.tests.json`, and `scripts/run-bun.mjs`.
-- Proper fix: never commit an importing file without the new module files it imports.
+- Proper fix: never commit an importing file without the new module files it imports. Check `git status --short` before and after validation.
 
 ### Worker Fork Model Override
 
@@ -150,7 +150,7 @@ Pop-Location
 - Worker B style: another independent subsystem with a disjoint write set.
 - Reviewer worker: read-only unless the manager assigns a specific fix.
 - Each worker final response must list changed files and commands run.
-- The manager updates `docs/engineering/CLEANUP_CHECKLIST.md` after each worker result.
+- The manager updates `README.md` for current handoff state. Historical evidence can be appended under `docs/engineering/archive/` when it is useful for audit trail, but do not make archived docs the source of current instructions.
 
 ## Troubleshooting Log Template
 
@@ -247,10 +247,10 @@ Status: resolved; current key is unpassworded and stored outside the repo.
 ```text
 Date: 2026-04-28
 Agent/worker: Manager
-Attempted command/action: bun tauri build --bundles nsis for 0.9.7
+Attempted command/action: bun tauri build --bundles nsis for a historical release
 Error or symptom: NSIS bundling failed with os error 1224, user-mapped section open.
 Root cause: Windows held a mapping to the generated installer output during the bundle step.
-Pivot used: Removed only backend\target\release\bundle\nsis\ME Inventory_0.9.7_x64-setup.exe and reran the bundle command with the real Bun binary first on PATH.
+Pivot used: Removed only the generated installer under backend\target\release\bundle\nsis\ and reran the bundle command with the real Bun binary first on PATH.
 Proper fix: Retry after clearing the generated installer output; investigate file locking only if the error repeats.
 Status: resolved
 ```

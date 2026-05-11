@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-11
 
-This file is a historical release-evidence log for the 0.9.x to 1.0.0 smoke path. For current hardening status, use `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md`. Read `docs/engineering/AGENT_RUNBOOK.md` before release work.
+Archived note: this file is historical release evidence. Use `README.md` for current release state and `docs/engineering/AGENT_RUNBOOK.md` before release work.
 
 ## Status Legend
 

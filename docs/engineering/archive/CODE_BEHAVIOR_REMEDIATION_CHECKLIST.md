@@ -2,7 +2,9 @@
 
 Date: 2026-05-02
 
-Source audit: `docs/engineering/CODE_BEHAVIOR_AUDIT.md`
+Archived note: this checklist is historical evidence from the hardening pass. Use `README.md` for current release state and `docs/engineering/AGENT_RUNBOOK.md` for validation commands.
+
+Source audit: `docs/engineering/archive/CODE_BEHAVIOR_AUDIT.md`
 
 This checklist tracks what is still left after the first audit-remediation pass. Work it from top to bottom unless a blocker forces a pivot.
 
@@ -43,8 +45,8 @@ This checklist tracks what is still left after the first audit-remediation pass.
   - `frontend/src/integrations/tauri/bridgeGuards.ts`
   - `frontend/tests/columns.test.ts`
   - `frontend/tsconfig.tests.json`
-  - `docs/engineering/CODE_BEHAVIOR_AUDIT.md`
-  - `docs/engineering/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md`
+  - `docs/engineering/archive/CODE_BEHAVIOR_AUDIT.md`
+  - `docs/engineering/archive/CODE_BEHAVIOR_REMEDIATION_CHECKLIST.md`
   - `docs/engineering/SYNC_RECOVERY_INVARIANTS.md`
   - `scripts/run-bun.mjs`
 - [!] Re-run baseline validation after any final cleanup:
